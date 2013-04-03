@@ -10,7 +10,8 @@
 
 (ns #^{:author "David Miller"
        :doc "A simple synchronous channel"}
-  clojure.tools.nrepl.sync-channel)
+  clojure.tools.nrepl.sync-channel
+  (:refer-clojure :exclude (take)))
   
  ;; Reason for existence
  ;;
@@ -26,49 +27,87 @@
  ;; we can go with a much simpler construct - a synchronous channel between producer and consumer
 ;;  that blocks either one if the other is not waiting.
  
+(defprotocol SyncChannel
+  "A synchronous channel (single-threaded on producer and consumer)"
+  (put   [this value]   "Put a value to this channel (Producer)")
+  (take  [this]         "Get a value from this channel (Consumer)")
+  (poll  [this] [this timeout]    "Get a value from this channel if one is available (within the designated timeout period)"))
+  
 
- 
- (defprotocol SyncChannel
-  "Defines the interface for a simple synchronous channel"
-  (stuff [this value] "Send a value to this channel. (Producer)")
-  (grab  [this]       "Get a value from this channel. (Consumer)"))
+(definterface ITakeValue 
+   (takeValue []))
   
  ;; SimpleSyncChannel assumes there is a single producer thread and a single consumer thread.
  (deftype SimpleSyncChannel [#^:volatile-mutable value 
-                             #^:volatile-mutable waiting?
+                             #^:volatile-mutable c-waiting?
+							 #^:volatile-mutable p-waiting?
 							 lock]
   SyncChannel
-  (stuff [this v] 
+  (put [this v] 
+    (when (nil? v)
+	  (throw (NullReferenceException. "Cannot put nil on SyncChannel")))
     (locking lock
+	  (when p-waiting?
+	     (throw (Exception. "Producer not single-threaded")))
 	  (set! value v)
-      (when-not waiting?
-        (set! waiting? true)
-        (System.Threading.Monitor/Wait lock))
-   	  (set! waiting? false)
-      (System.Threading.Monitor/Pulse lock)))
+      (System.Threading.Monitor/Pulse lock)
+	  (set! p-waiting? true)
+      (System.Threading.Monitor/Wait lock)
+      (set! p-waiting? false)))
 	     
-
-   (grab [this]
+  (poll [this] 
     (locking lock
-      (when-not waiting?
-        (set! waiting? true)
-        (System.Threading.Monitor/Wait lock))
-	  (let [curval value]
-	    (set! value nil)
-   	    (set! waiting? false)
-        (System.Threading.Monitor/Pulse lock)
-		curval))))
+	  (when c-waiting?
+	    (throw (Exception. "Consumer not single-threaded")))
+	  (when-not (nil? value)
+	    (.takeValue ^ITakeValue this))))
+		  
+  (poll [this timeout]
+    (locking lock
+	  (when c-waiting?
+	    (throw (Exception. "Consumer not single-threaded")))
+      (if (nil? value)
+        (do 
+		  (set! c-waiting? true)
+		  (let [result 
+		        (when (System.Threading.Monitor/Wait lock (int timeout))
+		           (.takeValue ^ITakeValue this))]
+		    (set! c-waiting? false)
+			result))
+	    (.takeValue ^ITakeValue this))))
 		
+  (take [this]
+    (locking lock
+	   (when c-waiting?
+	   	     (throw (Exception. "Consumer not single-threaded")))
+      (when (nil? value)
+        (set! c-waiting? true)
+        (System.Threading.Monitor/Wait lock)
+		(set! c-waiting? false))
+	  (.takeValue ^ITakeValue this)))
+
+  ITakeValue
+  (takeValue [this]
+    (let [curval value]
+      (set! value nil)
+      (System.Threading.Monitor/Pulse lock)
+	  curval)))
+
+(defn make-simple-sync-channel []
+  (SimpleSyncChannel. nil false false (Object.)))
+  
+  
+(comment
    
-;(def prn-agent (agent nil))
-;(defn sprn [& strings] (send-off prn-agent (fn [v] (apply prn strings))))  
-;(defn f [n]
-;   (let [sc (SimpleSyncChannel. nil false (Object.))
-;	      p (agent nil)
-;		  c (agent nil)]
-;	  (send c (fn [v] (dotimes [i n] (sprn (str "Consumer " i)) (sprn (str "====> "(grab sc))))))
-;	  (send p (fn [v] (dotimes [i n] (sprn (str "Producer " i)) (stuff sc i))))
-;	  [p c sc]))
-	  
+(def prn-agent (agent nil))
+(defn sprn [& strings] (send-off prn-agent (fn [v] (apply prn strings))))  
+(defn f [n]
+   (let [sc (make-simple-sync-channel)
+	      p (agent nil)
+		  c (agent nil)]
+	  (send c (fn [v] (dotimes [i n] (sprn (str "Consumer " i)) (sprn (str "====> "(take sc))))))
+	  (send p (fn [v] (dotimes [i n] (sprn (str "Producer " i)) (put sc i))))
+	  [p c sc]))
+)	  
 	  
    
