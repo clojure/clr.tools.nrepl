@@ -11,10 +11,10 @@
   clojure.tools.nrepl
   (:require [clojure.tools.nrepl.transport :as transport]
             clojure.set
-            [clojure.clr.io :as io])                               ;;; [clojure.java.io :as io])
+            [clojure.clr.io :as io])                               ;DM: [clojure.java.io :as io])
   (:use [clojure.tools.nrepl.misc :only (uuid)])
-  (:import clojure.lang.LineNumberingPushbackReader
-           (System.IO TextWriter)))                                ;;; (java.io Reader StringReader Writer PrintWriter)))
+  (:import clojure.lang.LineNumberingTextReader                    ;DM: LineNumberingPushbackReader
+           (System.IO TextReader Path)))                           ;DM: (java.io Reader StringReader Writer PrintWriter)))
 
 (defn response-seq
   "Returns a lazy seq of messages received via the given Transport.
@@ -22,7 +22,7 @@
    The seq will end only when the underlying Transport is closed (i.e.
    returns nil from `recv`) or if a message takes longer than `timeout`
    millis to arrive."
-  ([transport] (response-seq transport Int64/MaxValue))                        ;;; Long/MAX_VALUE
+  ([transport] (response-seq transport Int64/MaxValue))                        ;DM: Long/MAX_VALUE
   ([transport timeout]
     (take-while identity (repeatedly #(transport/recv transport timeout)))))
 
@@ -41,7 +41,7 @@
                            [now %]
                            head))
                        ; nanoTime appropriate here; looking to maintain ordering, not actual timestamps
-                       (clojure.lang.RT/nanoTime))                                      ;;; (System/nanoTime))
+                       (clojure.lang.RT/nanoTime))                                      ;DM: (System/nanoTime))
         tracking-seq (fn tracking-seq [responses]
                        (lazy-seq
                          (if (seq responses)
@@ -99,7 +99,7 @@
   [client & {:keys [clone]}]
   (let [resp (first (message client (merge {:op "clone"} (when clone {:session clone}))))]
     (or (:new-session resp)
-        (throw (InvalidOperationException.                                                ;;; IllegalStateException.
+        (throw (InvalidOperationException.                                                ;DM: IllegalStateException.
                  (str "Could not open new session; :clone response: " resp))))))
 
 (defn client-session
@@ -152,7 +152,7 @@
     (try
       (assoc msg :value (read-string value))
       (catch Exception e
-        (throw (InvalidOperationException. (str "Could not read response value: " value) e))))))    ;;; IllegalStateException
+        (throw (InvalidOperationException. (str "Could not read response value: " value) e))))))    ;DM: IllegalStateException
 
 (defn response-values
   "Given a seq of responses (as from response-seq or returned from any function returned
@@ -174,24 +174,24 @@
   [& {:keys [port host transport-fn] :or {transport-fn transport/bencode
                                           host "localhost"}}]
   {:pre [transport-fn port]}
-  (transport-fn (System.Net.Sockets.TcpClient. ^String host (int port))))                        ;;; java.net.Socket. 
+  (transport-fn (System.Net.Sockets.TcpClient. ^String host (int port))))                        ;DM: java.net.Socket. 
 
-(defn- ^System.Uri to-uri                                                      ;;; ^java.net.URI
+(defn- ^System.Uri to-uri                                                      ;DM: ^java.net.URI
   [x]
-  {:post [(instance? System.Uri %)]}                                           ;;; java.net.URI
+  {:post [(instance? System.Uri %)]}                                           ;DM: java.net.URI
   (if (string? x)
-    (System.Uri. x)                                                            ;;; java.net.URI
+    (System.Uri. x)                                                            ;DM: java.net.URI
     x))
 
 (defn- socket-info
   [x]
   (let [uri (to-uri x)
-        port (.Port uri)]                                                     ;;; .getPort
-    (merge {:host (.Host uri)}                                                ;;; .getHost
+        port (.Port uri)]                                                     ;DM: .getPort
+    (merge {:host (.Host uri)}                                                ;DM: .getHost
            (when (pos? port)
              {:port port}))))
 
-(def ^{:private false} uri-scheme #(-> (to-uri %) .Scheme .ToLower))          ;;; .getScheme  .toLowerCase
+(def ^{:private false} uri-scheme #(-> (to-uri %) .Scheme .ToLower))          ;DM: .getScheme  .toLowerCase
 
 (defmulti url-connect
   "Connects to an nREPL endpoint identified by the given URL/URI.  Valid
@@ -224,14 +224,18 @@
 
 (defmethod url-connect :default
   [uri]
-  (throw (ArgumentException.                                                                   ;;; IllegalArgumentException.
+  (throw (ArgumentException.                                                                   ;DM: IllegalArgumentException.
            (format "No nREPL support known for scheme %s, url %s" (uri-scheme uri) uri))))
 
 (def ^{:doc "Current version of nREPL, map of :major, :minor, :incremental, and :qualifier."}
       version
-  (when-let [in (.getResourceAsStream (class connect) "/clojure/tools/nrepl/version.txt")]
-    (with-open [^java.io.BufferedReader reader (io/reader in)]
-      (let [version-string (-> reader .readLine .trim)]
+  (when-let [in  (try (-> connect                                                                ;DM: (.getResourceAsStream (class connect) "/clojure/tools/nrepl/version.txt")
+                    (class)                                                                 ;DM: TODO: If only we had a way of embedding resources in AOT-compiled assemblies
+					(System.Reflection.Assembly/GetAssembly) 
+					(.GetManifestResourceStream (.Replace "/clojure/tools/nrepl/version.txt" \/ Path/DirectorySeparatorChar)))
+					(catch NotSupportedException e nil))]        
+    (with-open [^TextReader reader (io/text-reader in)]                                                   ;DM: ^java.io.BufferedReader  io/reader
+      (let [version-string (-> reader .ReadLine .Trim)]                                                   ;DM: .readLine .trim
         (assoc (->> version-string 
                  (re-find #"(\d+)\.(\d+)\.(\d+)-?(.*)")
                  rest
