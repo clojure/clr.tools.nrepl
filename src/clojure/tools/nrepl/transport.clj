@@ -162,7 +162,7 @@
   clojure.tools.nrepl.transport.Transport
   (send [this msg] (.Add out msg) this)                                            ;DM: .put
   (recv [this] (.Take in))                                                         ;DM: .take
-  (recv [this timeout] (let [x nil] (.TryTake in (ref x) (int timeout)) x)))      ;DM: .poll, removed TimeUnit/MILLISECONDS, added (int .), let, ref
+  (recv [this timeout] (let [x nil] (.TryTake in (by-ref x) (int timeout)) x)))    ;DM: .poll, removed TimeUnit/MILLISECONDS, added (int .), let, ref
 
 (defn piped-transports
   "Returns a pair of Transports that read from and write to each other."
