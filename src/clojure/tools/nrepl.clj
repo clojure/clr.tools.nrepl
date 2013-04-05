@@ -26,6 +26,8 @@
   ([transport timeout]
     (take-while identity (repeatedly #(transport/recv transport timeout)))))
 
+(def ^:private sw (doto (System.Diagnostics.Stopwatch.) (.Start)))	
+	
 (defn client
   "Returns a fn of zero and one argument, both of which return the current head of a single
    response-seq being read off of the given client-side transport.  The one-arg arity will
@@ -41,7 +43,7 @@
                            [now %]
                            head))
                        ; nanoTime appropriate here; looking to maintain ordering, not actual timestamps
-                       (clojure.lang.RT/nanoTime))                                      ;DM: (System/nanoTime))
+                       (.ElapsedTicks sw))                                      ;DM: (System/nanoTime))
         tracking-seq (fn tracking-seq [responses]
                        (lazy-seq
                          (if (seq responses)
