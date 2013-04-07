@@ -29,9 +29,9 @@
     (recur handler transport)))
 
 (defn- accept-connection
-  [{:keys [^TcpListener server-socket open-transports transport greeting handler]    ;DM: ^ServerSocket
+  [{:keys [^Socket server-socket open-transports transport greeting handler]    ;DM: ^ServerSocket
     :as server}]
-  (when (.Active server-socket)                                                      ;DM: when-not (.isClosed server-socket)
+  (when (.IsBound server-socket)                                                      ;DM: when-not (.isClosed server-socket)
     (let [sock (.AcceptSocket server-socket)]                                              ;DM: .accept
       (future (let [transport (transport sock)]
                 (try
@@ -132,9 +132,9 @@
    server map (useful if the :port option is 0 or was left unspecified."
   [& {:keys [port bind transport-fn handler ack-port greeting-fn] :or {port 0}}]
   (let [bind-addr (if bind (IPAddress. bind) (IPAddress/Any))                               ;DM:(InetSocketAddress. bind port) (InetSocketAddress. port)
-        ss (TcpListener. bind port)                                                         ;DM: (ServerSocket. port 0 (.getAddress bind-addr))
+        ss (TcpListener. bind-addr port)                                                    ;DM: (ServerSocket. port 0 (.getAddress bind-addr))
         server (assoc
-                 (Server. ss
+                 (Server. (.Server ss)
                           (.Port ^IPEndPoint (.LocalEndpoint ss))                           ;DM: (.getLocalPort ss)
                           (atom #{})
                           (or transport-fn t/bencode)
@@ -142,6 +142,7 @@
                           (or handler (default-handler)))
                  ;; TODO here for backward compat with 0.2.x; drop eventually
                  :ss ss)]
+    (.Start ss)                                                                             ;DM: ADDED
     (future (accept-connection server))
     (when ack-port
       (ack/send-ack (:port server) ack-port))
