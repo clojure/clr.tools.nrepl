@@ -91,15 +91,7 @@
 (defn bencode
   "Returns a Transport implementation that serializes messages
    over the given Socket or InputStream/OutputStream using bencode."
-  ([s] (let [^Socket s (cond            ;DM: TODO: Fix this very bad code smell -- make sure a Socket is passed, or extend io/input-stream and friend
-  
-         (instance? System.Net.Sockets.TcpListener s) 
-		 (.Socket ^System.Net.Sockets.TcpListener s) 
-	     (instance? System.Net.Sockets.TcpClient s) 
-		 (.Client ^System.Net.Sockets.TcpClient s) 	 
-		 :otherwise
-		 s)]
-                 (bencode s s s)))                                                   ;DM: remove ^Socket hint on s param
+  ([^Socket s] (bencode s s s))
   ([in out & [^Socket s]]
     (let [in (PushbackInputStream. (io/input-stream in))
           out (io/output-stream out)]

@@ -10,7 +10,7 @@
                                             session
                                             load-file))
   (:use [clojure.tools.nrepl.misc :only (returning response-for log)])
-  (:import (System.Net.Sockets Socket TcpListener)                                      ;DM: (java.net Socket ServerSocket InetSocketAddress)
+  (:import (System.Net.Sockets Socket SocketType ProtocolType)        ;DM: (java.net Socket ServerSocket InetSocketAddress)
             (System.Net IPAddress IPEndPoint)))   
 
 (defn handle*
@@ -32,7 +32,7 @@
   [{:keys [^Socket server-socket open-transports transport greeting handler]    ;DM: ^ServerSocket
     :as server}]
   (when (.IsBound server-socket)                                                      ;DM: when-not (.isClosed server-socket)
-    (let [sock (.AcceptSocket server-socket)]                                              ;DM: .accept
+    (let [sock (.Accept server-socket)]                                               ;DM: .accept
       (future (let [transport (transport sock)]
                 (try
                   (swap! open-transports conj transport)
@@ -52,9 +52,10 @@
 
 (defn stop-server
   "Stops a server started via `start-server`."
-  [{:keys [open-transports ^TcpListener server-socket] :as server}]             ;DM: ^ServerSocket
+  [{:keys [open-transports ^Socket server-socket] :as server}]             ;DM: ^ServerSocket
   (returning server
-    (.Dispose server-socket)                                                    ;DM: .close
+    (.Shutdown server-socket)                                              ;DM: ADDED
+    (.Close server-socket)                                                 ;DM: .close
     (swap! open-transports #(reduce
                               (fn [s t]
                                 ; should always be true for the socket server...
@@ -131,18 +132,21 @@
    The port that the server is open on is available in the :port slot of the
    server map (useful if the :port option is 0 or was left unspecified."
   [& {:keys [port bind transport-fn handler ack-port greeting-fn] :or {port 0}}]
-  (let [bind-addr (if bind (IPAddress. bind) (IPAddress/Any))                               ;DM:(InetSocketAddress. bind port) (InetSocketAddress. port)
-        ss (TcpListener. bind-addr port)                                                    ;DM: (ServerSocket. port 0 (.getAddress bind-addr))
+  (let [bind-addr (if bind (IPAddress. bind) (IPAddress/Any))                       ;DM:(InetSocketAddress. bind port) (InetSocketAddress. port)
+        ipe (IPEndPoint. bind-addr port) 
+        ss  (doto                                                                   ;DM: (ServerSocket. port 0 (.getAddress bind-addr))
+		      (Socket. (.AddressFamily ipe)  SocketType/Stream  ProtocolType/Tcp)   ;DM: Added
+			  (.Bind ^IPEndPoint ipe))  
         server (assoc
-                 (Server. (.Server ss)
-                          (.Port ^IPEndPoint (.LocalEndpoint ss))                           ;DM: (.getLocalPort ss)
+                 (Server. ss
+                          (.Port ^IPEndPoint (.LocalEndPoint ss))                   ;DM: (.getLocalPort ss)
                           (atom #{})
                           (or transport-fn t/bencode)
                           greeting-fn
                           (or handler (default-handler)))
                  ;; TODO here for backward compat with 0.2.x; drop eventually
                  :ss ss)]
-    (.Start ss)                                                                             ;DM: ADDED
+    (.Listen ss 0)                                                                   ;DM: ADDED
     (future (accept-connection server))
     (when ack-port
       (ack/send-ack (:port server) ack-port))

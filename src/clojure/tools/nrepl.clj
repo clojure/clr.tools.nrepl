@@ -176,7 +176,7 @@
   [& {:keys [port host transport-fn] :or {transport-fn transport/bencode
                                           host "localhost"}}]
   {:pre [transport-fn port]}
-  (transport-fn (System.Net.Sockets.TcpClient. ^String host (int port))))    ;DM: java.net.Socket. 
+  (transport-fn (.Client (System.Net.Sockets.TcpClient. ^String host (int port)))))    ;DM: java.net.Socket. 
 
 (defn- ^System.Uri to-uri                                                      ;DM: ^java.net.URI
   [x]
