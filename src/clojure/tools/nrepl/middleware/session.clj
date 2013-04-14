@@ -8,9 +8,9 @@
   (:require (clojure main test)
             [clojure.tools.nrepl.transport :as t])
   (:import clojure.tools.nrepl.transport.Transport
-           (System.IO TextReader TextWriter StringReader StreamWriter)                             ;DM: (java.io PipedReader PipedWriter Reader Writer PrintWriter StringReader)
-           clojure.lang.LineNumberingTextReader                                                    ;DM: clojure.lang.LineNumberingPushbackReader
-           ))                                                                                      ;DM: java.util.concurrent.LinkedBlockingQueue
+           (System.IO TextReader TextWriter StringReader StreamWriter StringWriter)    ;DM: java.io PipedReader PipedWriter Reader Writer PrintWriter StringReader 
+           clojure.lang.LineNumberingTextReader                                        ;DM: clojure.lang.LineNumberingPushbackReader
+           ))                                                                          ;DM: java.util.concurrent.LinkedBlockingQueue
 
 (def ^{:private true} sessions (atom {}))
 
@@ -23,34 +23,108 @@
 (def ^{:dynamic true :private true} *out-limit* 1024)
 (def ^{:dynamic true :private true} *skipping-eol* false)
 
+
+;DM: ; I would really love to follow this implementation more closely, 
+;DM: ; but I run into the proxy-super-with-multiple-arities problems, 
+;DM: ; as detailed in http://kotka.de/blog/2010/03/proxy_gen-class_little_brother.html.
+;DM: ; Also, given the way we solve the problem, I have to make sure there are flushes on newlines.
+ 
+;DM: (defn- session-out
+;DM:   "Returns a PrintWriter suitable for binding as *out* or *err*.  All of
+;DM:    the content written to that PrintWriter will (when .flush-ed) be sent on the
+;DM:    given transport in messages specifying the given session-id.
+;DM:    `channel-type` should be :out or :err, as appropriate."
+;DM:   [channel-type session-id transport]
+;DM:   (let [buf (clojure.tools.nrepl.StdOutBuffer.)]
+;DM:     (PrintWriter. (proxy [Writer] []
+;DM:                     (close [] (.flush ^Writer this))
+;DM:                     (write [& [x ^Integer off ^Integer len]]
+;DM:                       (locking buf
+;DM:                         (cond
+;DM:                           (number? x) (.append buf (char x))
+;DM:                           (not off) (.append buf x)
+;DM:                           ; the CharSequence overload of append takes an *end* idx, not length!
+;DM:                           (instance? CharSequence x) (.append buf ^CharSequence x off (+ len off))
+;DM:                           :else (.append buf ^chars x off len))
+;DM:                         (when (<= *out-limit* (.length buf))
+;DM:                           (.flush ^Writer this))))
+;DM:                     (flush []
+;DM:                       (let [text (locking buf (let [text (str buf)]
+;DM:                                                 (.setLength buf 0)
+;DM:                                                 text))]
+;DM:                         (when (pos? (count text))
+;DM:                           (t/send (or (:transport *msg*) transport)
+;DM:                                   (response-for *msg* :session session-id
+;DM:                                                 channel-type text))))))
+;DM:                   true)))
+				  
+				  
 (defn- session-out
   "Returns a PrintWriter suitable for binding as *out* or *err*.  All of
    the content written to that PrintWriter will (when .flush-ed) be sent on the
    given transport in messages specifying the given session-id.
    `channel-type` should be :out or :err, as appropriate."
   [channel-type session-id transport]
-  (let [buf (StringBuilder.)]                                                                            ;DM: clojure.tools.nrepl.StdOutBuffer.
-    (identity (proxy [TextWriter] []                                                                     ;DM: PrintWriter. replace with identity, Writer => TextWriter
-                    (Dispose [isDisposing] (when isDisposing (.Flush ^TextWriter this)))                 ;DM: (close [] (.flush ^Writer this))
-                    (Write [x]                                                                           ;DM: write [& [x ^Integer off ^Integer len]] 
-                      (locking buf
-                        (.Append buf x))                                                    ;DM: (cond
-                                                                                            ;DM: (number? x) (.append buf (char x))
-                                                                                            ;DM: (not off) (.append buf x)
-                                                                                            ;DM: ; the CharSequence overload of append takes an *end* idx, not length!
-                                                                                            ;DM: (instance? CharSequence x) (.append buf ^CharSequence x off (+ len off))
-                                                                                            ;DM: :else (.append buf ^chars x off len))
-                        (when (<= *out-limit* (.Length buf))                                ;DM: .length
-                          (.Flush ^TextWriter this)))                                       ;DM: .flush ^Writer
-                    (Flush []                                                               ;DM: flush
+  (let [buf (StringBuilder.)
+        maybe-flush (fn [^StringWriter w ^StringBuilder buf] 			  
+                          (when (or (<= *out-limit* (.Length buf))
+						            (.Contains (.ToString buf) (Environment/NewLine)))
+                            (.Flush  w)))
+		newline (Environment/NewLine)
+		nl-len (.Length newline)
+		send-segment (fn [^String segment]
+		               (System.Console/WriteLine "Sending {0}" segment)
+                       (t/send (or (:transport *msg*) transport)
+                               (response-for *msg* :session session-id
+                                             channel-type segment)))
+        send-text (fn [^String text]
+		            (let [text-len (.Length text)]
+                      (when (pos? text-len)
+					    (loop [start 0]
+					       (let [idx (.IndexOf text newline start)]
+					         (if (neg? idx)  
+					  		   (send-segment (.Substring text start)) ; no more newlines, just spit out remainder
+							   (let [idx2 (+ idx nl-len)]
+					  		     (send-segment (.Substring text start (- idx2 start)))
+							     (when (< idx2 text-len)
+                                     (recur idx2)))))))))]
+    (identity (proxy [StringWriter] [buf]
+                    (Dispose [isDisposing] (when isDisposing (.Flush ^TextWriter this)))
+                    (Write 
+					  ([x] (locking buf
+					         (proxy-super Write x)
+						     (maybe-flush this buf)))
+					  ([ x y ] (locking buf
+					             (proxy-super Write x y)
+						         (maybe-flush this buf)))
+					  ([ x y z] (locking buf
+					              (proxy-super Write x y z)
+						          (maybe-flush this buf)))
+					  ([ x y z w] (locking buf
+					                (proxy-super Write x y z w)
+						            (maybe-flush this buf))))	
+                    (WriteLine 
+					  ([] (locking buf
+					        (proxy-super WriteLine)
+						    (maybe-flush this buf)))					
+					  ([x] (locking buf
+					         (proxy-super WriteLine x)
+						     (maybe-flush this buf)))
+					  ([ x y ] (locking buf
+					             (proxy-super WriteLine x y)
+						         (maybe-flush this buf)))
+					  ([ x y z] (locking buf
+					              (proxy-super WriteLine x y z)
+						          (maybe-flush this buf)))
+					  ([ x y z w] (locking buf
+					                (proxy-super WriteLine x y z w)
+						            (maybe-flush this buf))))										
+                    (Flush []  
                       (let [text (locking buf (let [text (str buf)]
-                                                (.set_Length buf 0)                         ;DM: .setLength
+                                                (.set_Length buf 0)
                                                 text))]
-                        (when (pos? (count text))
-                          (t/send (or (:transport *msg*) transport)
-                                  (response-for *msg* :session session-id
-                                                channel-type text))))))
-                  )))                                                                       ;DM: true
+						(send-text text)))))))
+                  
 
 (defn- session-in
   "Returns a LineNumberingPushbackReader suitable for binding to *in*.

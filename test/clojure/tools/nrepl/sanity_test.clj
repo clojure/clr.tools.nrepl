@@ -98,9 +98,9 @@
       (.Write "abcd")                                 ;DM: .write
       (.Write (.ToCharArray "ef") 0 2)                ;DM: .write .toCharArray
       (.Write "gh" 0 2)                               ;DM: .write
-      (.Write (.ToCharArray "ij"))                    ;DM: .write(.toCharArray
-      (.Write "   klm" 5 1)                           ;DM: .write
-      (.Write 32)                                     ;DM: .write
+      (.Write (.ToCharArray "ij"))                    ;DM: .write .toCharArray
+      (.Write (.ToCharArray "   klm") 5 1)            ;DM: (.write "   klm" 5 1)  - no such overload on TextWriter
+      (.Write (char 32))                              ;DM: (.write 32)  -- this prints a char in JVM.  No such overload on TextWriter
       .Flush)                                         ;DM: .flush
     (with-open [out (identity w)]                     ;DM: java.io.PrintWriter.
       (binding [*out* out]
@@ -108,7 +108,16 @@
         (prn #{})
         (flush)))
     
-    (is (= [(platform-newlines "println\n") (platform-newlines "abcdefghijm " "\n#{}\n")]        ;DM: Added platform-newlines
+;DM:     (is (= ["println\n" "abcdefghijm " "\n#{}\n"]
+;DM:           (->> (repl/response-seq local 0)
+;DM:             (map :out))))
+;DM: ; I'm not sure why the (newline) call above does not generate a separate response in the JVM version.
+;DM: ; When I see a newline, I spit out what we've got so far.
+		
+    (is (= [(platform-newlines "println\n") 
+	        (platform-newlines "abcdefghijm ") 
+			(platform-newlines "\n")
+			(platform-newlines "#{}\n")]
           (->> (repl/response-seq local 0)
             (map :out))))))
 
