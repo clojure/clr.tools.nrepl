@@ -6,6 +6,7 @@
         [clojure.tools.nrepl.middleware.interruptible-eval :only (*msg*)]
         [clojure.tools.nrepl.middleware :only (set-descriptor!)])
   (:require (clojure main test)
+			[clojure.tools.nrepl.debug :as debug]
             [clojure.tools.nrepl.transport :as t])
   (:import clojure.tools.nrepl.transport.Transport
            (System.IO TextReader TextWriter StringReader StreamWriter StringWriter)    ;DM: java.io PipedReader PipedWriter Reader Writer PrintWriter StringReader 
@@ -73,7 +74,7 @@
 		newline (Environment/NewLine)
 		nl-len (.Length newline)
 		send-segment (fn [^String segment]
-		               (System.Console/WriteLine "Sending {0}" segment)
+		               (debug/prn-thread "Sending " segment)
                        (t/send (or (:transport *msg*) transport)
                                (response-for *msg* :session session-id
                                              channel-type segment)))
@@ -132,19 +133,22 @@
    {:status :need-input} message on the provided transport so the client/user
    can provide content to be read."
   [session-id transport]
-  (let [input-queue (|System.Collections.Concurrent.BlockingCollection`1[System.Object]|)            ;DM: LinkedBlockingQueue.
+  (let [input-queue (|System.Collections.Concurrent.BlockingCollection`1[System.Object]|.)            ;DM: LinkedBlockingQueue.
         request-input (fn []
+		                (debug/prn-thread "Request input")
                         (cond (> (.Count input-queue) 0)                                ;DM: .size
                                 (.Take input-queue)                                     ;DM: .take
                               *skipping-eol*
                                 nil
                               :else
                                 (do
+								  (debug/prn-thread "Sending message")
                                   (t/send transport
                                           (response-for *msg* :session session-id
                                                         :status :need-input))
                                   (.Take input-queue))))                                ;DM: .take
         do-read (fn [buf off len]
+		          (debug/prn-thread "do-read")
                   (locking input-queue
                     (loop [i off]
                       (cond
@@ -161,13 +165,15 @@
 				   (Peek [] -1)                                                         ;DM: ADDED  -- we'll just say we don't support it 
                    (Read                                                                ;DM: read
                      ([]
+					   (debug/prn-thread "Read[]")
                        (let [first-character (request-input)]                           ;DM: (let [^Reader this this] (proxy-super read))
                          (if (or (nil? first-character) (= first-character -1))         ;DM: [x]
-                            -1                                                          ;DM: let [^Reader this this]
-                             first-character)))                                         ;DM:  if (instance? java.nio.CharBuffer x
+                           (int -1)                                                     ;DM: let [^Reader this this]
+                           (int first-character))))                                     ;DM:  if (instance? java.nio.CharBuffer x
                                                                                         ;DM:    proxy-super read ^java.nio.CharBuffer x
                                                                                         ;DM:    proxy-super read ^chars x
                      ([^chars buf off len]
+					   (debug/prn-thread "Read[3]")
                       (if (zero? len)
                         -1
                         (let [first-character (request-input)]

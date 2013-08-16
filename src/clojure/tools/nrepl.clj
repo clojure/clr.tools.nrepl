@@ -11,6 +11,7 @@
   clojure.tools.nrepl
   (:require [clojure.tools.nrepl.transport :as transport]
             clojure.set
+			[clojure.tools.nrepl.debug :as debug]
             [clojure.clr.io :as io])                               ;DM: [clojure.java.io :as io])
   (:use [clojure.tools.nrepl.misc :only (uuid)])
   (:import clojure.lang.LineNumberingTextReader                    ;DM: LineNumberingPushbackReader
@@ -22,7 +23,7 @@
    The seq will end only when the underlying Transport is closed (i.e.
    returns nil from `recv`) or if a message takes longer than `timeout`
    millis to arrive."
-  ([transport] (response-seq transport Int64/MaxValue))                        ;DM: Long/MAX_VALUE
+  ([transport] (response-seq transport Int32/MaxValue))                        ;DM: Long/MAX_VALUE
   ([transport timeout]
     (take-while identity (repeatedly #(transport/recv transport timeout)))))
 
@@ -39,12 +40,14 @@
   (let [latest-head (atom nil)
         update #(swap! latest-head
                        (fn [[timestamp seq :as head] now]
+					     (debug/prn-thread "client::update ") ;DEBUG
                          (if (< timestamp now)
                            [now %]
                            head))
                        ; nanoTime appropriate here; looking to maintain ordering, not actual timestamps
                        (.ElapsedTicks sw))                                      ;DM: (System/nanoTime))
         tracking-seq (fn tracking-seq [responses]
+		               (debug/prn-thread "client:: tracking seq") ;DEBUG
                        (lazy-seq
                          (if (seq responses)
                            (let [rst (tracking-seq (rest responses))]
@@ -54,13 +57,16 @@
         restart #(let [head (-> transport
                               (response-seq response-timeout)
                               tracking-seq)]
+			       (debug/prn-thread "client:: restart") ;DEBUG
                    (reset! latest-head [0 head])
                    head)]
     ^{::transport transport ::timeout response-timeout}
     (fn this
-      ([] (or (second @latest-head)
+      ([] (debug/prn-thread "client:: []") ;DEBUG
+	      (or (second @latest-head)
               (restart)))
       ([msg]
+	     (debug/prn-thread "client: [" msg "]") ;DEGBUG
         (transport/send transport msg)
         (this)))))
 
@@ -91,7 +97,9 @@
    messages related to the message :id that will terminate upon receipt of a
    \"done\" :status."
   [client {:keys [id] :as msg :or {id (uuid)}}]
+  (debug/prn-thread "message:: sending:" msg)  ;DEBUG
   (let [f (delimited-transport-seq client #{"done"} {:id id})]
+    (debug/prn-thread "message:: Have f") ;DEBUG
     (f (assoc msg :id id))))
 
 (defn new-session
@@ -112,6 +120,7 @@
    closed."
   [client & {:keys [session clone]}]
   (let [session (or session (apply new-session client (when clone [:clone clone])))]
+    (debug/prn-thread "client-session:: have session") ;DEBUG
     (delimited-transport-seq client #{"session-closed"} {:session session})))
 
 (defn combine-responses

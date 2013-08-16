@@ -2,6 +2,7 @@
       :author "Chas Emerick"}
      clojure.tools.nrepl.server
   (:require [clojure.tools.nrepl :as repl]
+  			[clojure.tools.nrepl.debug :as debug]
             (clojure.tools.nrepl [ack :as ack]
                                  [transport :as t]
                                  [middleware :as middleware])
@@ -10,12 +11,13 @@
                                             session
                                             load-file))
   (:use [clojure.tools.nrepl.misc :only (returning response-for log)])
-  (:import (System.Net.Sockets Socket SocketType ProtocolType)        ;DM: (java.net Socket ServerSocket InetSocketAddress)
+  (:import (System.Net.Sockets Socket SocketType ProtocolType SocketShutdown)        ;DM: (java.net Socket ServerSocket InetSocketAddress)
             (System.Net IPAddress IPEndPoint)))   
 
 (defn handle*
   [msg handler transport]
   (try
+    (debug/prn-thread "handle* " msg) ;DEGUG
     (handler (assoc msg :transport transport))
     (catch Exception t                                                       ;DM: Throwable
       (log t "Unhandled REPL handler exception processing message" msg))))
@@ -54,7 +56,8 @@
   "Stops a server started via `start-server`."
   [{:keys [open-transports ^Socket server-socket] :as server}]             ;DM: ^ServerSocket
   (returning server
-    (.Shutdown server-socket)                                              ;DM: ADDED
+    (when (.Connected server-socket)                                       ;DM: ADDED
+	  (.Shutdown server-socket SocketShutdown/Both))                       ;DM: ADDED
     (.Close server-socket)                                                 ;DM: .close
     (swap! open-transports #(reduce
                               (fn [s t]
