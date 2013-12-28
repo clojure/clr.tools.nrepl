@@ -2,6 +2,7 @@
      clojure.tools.nrepl.middleware.interruptible-eval
   (:require [clojure.tools.nrepl.transport :as t]
             clojure.tools.nrepl.middleware.pr-values
+  			[clojure.tools.nrepl.debug :as debug]			
             clojure.main)
   (:use [clojure.tools.nrepl.misc :only (response-for returning)]
         [clojure.tools.nrepl.middleware :only (set-descriptor!)])
@@ -40,6 +41,7 @@
       (t/send transport (response-for msg {:status #{:error :namespace-not-found :done}}))
       (with-bindings @bindings
         (try
+		  (debug/prn-thread "Evaluating " code " in " ns) ;DEBUG
           (clojure.main/repl
             ;; clojure.main/repl paves over certain vars even if they're already thread-bound
             :init #(do (set! *compile-path* (@bindings #'*compile-path*))
@@ -62,6 +64,7 @@
                                              #'*1 v))
                      (.Flush ^TextWriter err)                                                   ;DM: .flush ^Writer
                      (.Flush ^TextWriter out)                                                   ;DM: .flush ^Writer
+					 (debug/prn-thread "Evaluating " code " yields " v) ;DEBUG
                      (t/send transport (response-for msg
                                                      {:value v
                                                       :ns (-> *ns* ns-name str)})))
@@ -123,6 +126,7 @@
 (declare run-next)
 (defn- run-next*
   [session executor]                               ;DM: removed ^Executor
+  #_(debug/prn-thread "run-next* on session ") ;DEBUG
   (let [qa (-> session meta :queue)]
     (loop []
       (let [q @qa
@@ -130,7 +134,9 @@
         (if-not (compare-and-set! qa q qn)
           (recur)
           (when (seq qn)
-            (ThreadPool/QueueUserWorkItem (gen-delegate WaitCallback [state] (run-next session executor (peek qn))))))))))             ;DM: (.execute executor (run-next session executor (peek qn)))
+		    (let [fnext (run-next session executor (peek qn))]
+            (ThreadPool/QueueUserWorkItem (gen-delegate WaitCallback [state] (fnext))))))))))
+			;DM: (.execute executor (run-next session executor (peek qn)))
 
 (defn- run-next
   [session executor f]
@@ -147,8 +153,10 @@
       (let [q @qa]
         (if-not (compare-and-set! qa q (conj q f))
           (recur)
-          (when (empty? q)
-            (ThreadPool/QueueUserWorkItem (gen-delegate WaitCallback [state] (run-next session executor f)))))))))          ;DM: (.execute executor (run-next session executor f))
+		  (when (empty? q)
+			(let [fnext (run-next session executor f)]
+              (ThreadPool/QueueUserWorkItem (gen-delegate WaitCallback [state] (fnext))))))))))
+			;DM: (.execute executor (run-next session executor f))
 
 (defn interruptible-eval
   "Evaluation middleware that supports interrupts.  Returns a handler that supports
