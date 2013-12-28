@@ -10,7 +10,7 @@
   (:refer-clojure :exclude (send))
   (:import (System.IO  Stream  EndOfStreamException)                      ;DM: (java.io InputStream OutputStream PushbackInputStream
            (clojure.lang PushbackInputStream PushbackTextReader)          ;DM:  PushbackReader IOException EOFException)
-           (System.Net.Sockets Socket SocketException)                    ;DM: (java.net Socket SocketException)
+           (System.Net.Sockets Socket)                                    ;DM: (java.net Socket SocketException)
            (System.Collections.Concurrent                                 ;DM: (java.util.concurrent SynchronousQueue LinkedBlockingQueue
                |BlockingCollection`1[System.Object]|)                     ;DM: BlockingQueue TimeUnit)
 ;		   clojure.tools.nrepl.transport.Transport                        ;DM: Added
@@ -28,9 +28,9 @@
 (deftype FnTransport [recv-fn send-fn close]
   Transport
   ;; TODO this keywordization/stringification has no business being in FnTransport
-  (send [this msg] (debug/prn-thread "FnTransport:: send " msg) (-> msg clojure.walk/stringify-keys send-fn) this)
-  (recv [this] (debug/prn-thread "FnTransprot:: recv ") (.recv this Int32/MaxValue))                                      ;DM: Long/MAX_VALUE
-  (recv [this timeout] (debug/prn-thread "FnTransport:: recv [" timeout "]") (clojure.walk/keywordize-keys (recv-fn timeout)))
+  (send [this msg] #_(debug/prn-thread "FnTransport:: send " msg) (-> msg clojure.walk/stringify-keys send-fn) this)
+  (recv [this] #_(debug/prn-thread "FnTransprot:: recv ") (.recv this Int32/MaxValue))                                      ;DM: Long/MAX_VALUE
+  (recv [this timeout] #_(debug/prn-thread "FnTransport:: recv [" timeout "]") (clojure.walk/keywordize-keys (recv-fn timeout)))
   System.IDisposable                                                             ;DM: java.io.Closeable
   (Dispose [this] (close)))                                                      ;DM: (close [this] (close)))  TODO: This violates good IDisposable practice
 
@@ -42,17 +42,18 @@
     (let [read-queue (sc/make-simple-sync-channel)]                               ;DM: (SynchronousQueue.)
       (future (try
                 (while true
-                  (sc/put read-queue (read))
-				  (debug/prn-thread "fn-transport:: put to queue"))   ;DEBUG                                  ;DM: .put
+				  #_(debug/prn-thread "fn-transport:: ready to read")
+  			      (sc/put read-queue (read))                                       ;DM: .put
+				  #_(debug/prn-thread "fn-transport:: put to queue"))   ;DEBUG 
                 (catch Exception t                                                ;DM: Throwable
-				  (debug/prn-thread "fn-transport:: caught exception!!!!")
+				  #_(debug/prn-thread "fn-transport:: caught exception!!!!")
                   (sc/put read-queue t))))                                        ;DM: .put
       (FnTransport.
         (let [failure (atom nil)]
           #(if @failure
              (throw @failure)
              (let [msg (sc/poll read-queue % )]                                   ;DM:  .poll, remove TimeUnit/MILLISECONDS
-			   (debug/prn-thread "fn-transport:: read from queue: " msg) ;DEBUG
+			   #_(debug/prn-thread "fn-transport:: read from queue: " msg) ;DEBUG
                (if (instance? Exception msg)                                      ;DM: Throwable
                  (do (reset! failure msg) (throw msg))
                  msg))))
@@ -86,10 +87,10 @@
   `(try
      ~@body
      (catch EndOfStreamException e#                                        ;DM: EOFException
-       (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server")))
+       (throw (ObjectDisposedException. "The transport's socket appears to have lost its connection to the nREPL server")))
      (catch Exception e#                                                   ;DM: Throwable
        (if (and ~s (not (.Connected ~s)))                                  ;DM: .isConnected
-         (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server"))
+         (throw (ObjectDisposedException. "The transport's socket appears to have lost its connection to the nREPL server"))
          (throw e#)))))
 
 (defn bencode
@@ -100,8 +101,7 @@
     (let [in (PushbackInputStream. (io/input-stream in))
           out (io/output-stream out)]
       (fn-transport
-        #(let [_ (debug/prn-thread "bencode: reading")
-		payload (rethrow-on-disconnection s (be/read-bencode in))
+        #(let [payload (rethrow-on-disconnection s (be/read-bencode in))
                unencoded (<bytes (payload "-unencoded"))
                to-decode (apply dissoc payload "-unencoded" unencoded)]
            (merge (dissoc payload "-unencoded")
@@ -109,7 +109,6 @@
                   (<bytes to-decode)))
         #(rethrow-on-disconnection s
            (locking out
-		      (debug/prn-thread "bencode: writing" %) ;DEBUG
              (doto out
                (be/write-bencode %)
                .Flush)))                                                  ;DM: .flush
