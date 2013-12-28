@@ -1,6 +1,7 @@
 (ns clojure.tools.nrepl-test
-  (:import System.Threading.Thread System.IO.FileInfo System.Net.Sockets.SocketException)           ;DM: java.net.SocketException java.io.File
+  (:import System.Threading.Thread System.IO.FileInfo)           ;DM: java.net.SocketException java.io.File
   (:use clojure.test
+        [clojure.test-helper :only [platform-newlines]]          ;DM: Added
         [clojure.tools.nrepl :as nrepl])
   (:require (clojure.tools.nrepl [transport :as transport]
                                  [server :as server]
@@ -38,21 +39,21 @@
                       (-> literal read-string eval list))
                     (repl-values client literal))
     "5"
-    ;"0xff"
-    ;"5.1"
-    ;"-2e12"
-    ;"1/4"
-    ;"'symbol"
-    ;"'namespace/symbol"
-    ;":keyword"
-    ;"::local-ns-keyword"
-    ;":other.ns/keyword"
-    ;"\"string\""
-    ;"\"string\\nwith\\r\\nlinebreaks\""
-    ;"'(1 2 3)"
-    ;"[1 2 3]"
-    ;"{1 2 3 4}"
-    );"#{1 2 3 4}"
+    "0xff"
+    "5.1"
+    "-2e12"
+    "1/4"
+    "'symbol"
+    "'namespace/symbol"
+    ":keyword"
+    "::local-ns-keyword"
+    ":other.ns/keyword"
+    "\"string\""
+    "\"string\\nwith\\r\\nlinebreaks\""
+    "'(1 2 3)"
+    "[1 2 3]"
+    "{1 2 3 4}"
+    "#{1 2 3 4}")
 
   #_(is (= (->> "#\"regex\"" read-string eval list (map str))
          (->> "#\"regex\"" (repl-values client) (map str)))))
@@ -87,19 +88,19 @@
     (is (not (session-alive?)))))
 
 (def-repl-test separate-value-from-*out*
-  (is (= {:value [nil] :out "5\n"}
+  (is (= {:value [nil] :out (platform-newlines "5\n")}                         ;DM: Added platform-newlines
          (-> (map read-response-value (repl-eval client "(println 5)"))
            combine-responses
            (select-keys [:value :out])))))
 
 (def-repl-test sessionless-*out*
-  (is (= "5\n:foo\n"
+  (is (= (platform-newlines "5\n:foo\n")                                       ;DM: Added platform-newlines
          (-> (repl-eval client "(println 5)(println :foo)")
            combine-responses
            :out))))
 
 (def-repl-test session-*out*
-  (is (= "5\n:foo\n"
+  (is (= (platform-newlines "5\n:foo\n")                                       ;DM: Added platform-newlines
          (-> (repl-eval session "(println 5)(println :foo)")
            combine-responses
            :out))))
@@ -111,11 +112,11 @@
                                 "session" sid})
     (is (->> (repeatedly #(transport/recv transport2 1000))
           (take-while identity)
-          (some #(= ":foo\n" (:out %)))))))
+          (some #(= (platform-newlines ":foo\n") (:out %)))))))                ;DM: Added platform-newlines
 
 (def-repl-test streaming-out
   (is (= (for [x (range 10)]
-           (str x \newline))
+           (platform-newlines (str x \newline)))                               ;DM: Added platform-newlines
         (->> (repl-eval client "(dotimes [x 10] (println x))")
           (map :out)
           (remove nil?)))))
@@ -146,7 +147,7 @@
               (remove nil?)))))
 
 (def-repl-test ensure-whitespace-prints
-  (is (= " \t \n \f \n" (->> (repl-eval client "(println \" \t \n \f \")")
+  (is (= (str " \t \n \f " (platform-newlines "\n")) (->> (repl-eval client "(println \" \t \n \f \")")  ;DM: " \t \n \f \n"
                           combine-responses
                           :out))))
 
@@ -179,17 +180,17 @@
   (let [{:keys [status err value]} (combine-responses (repl-eval session "(throw (Exception. \"bad, bad code\"))"))]
     (is (= #{"eval-error" "done"} status))
     (is (nil? value))
-    (is (.contains err "bad, bad code"))
+    (is (.Contains err "bad, bad code"))                                                           ;DM: .contains
     (is (= [true] (repl-values session "(.Contains (str *e) \"bad, bad code\")")))))               ;DM: .contains
 
 (def-repl-test multiple-expressions-return
   (is (= [5 18] (repl-values session "5 (/ 5 0) (+ 5 6 7)"))))
 
 (def-repl-test return-on-incomplete-expr
-  (let [{:keys [out status value]} (combine-responses (repl-eval session "(missing paren"))]
+  (let [{:keys [out status value]} (combine-responses (repl-eval session "(missing paren"))]       ;;; ) -- so editor not confused
     (is (nil? value))
     (is (= #{"done" "eval-error"} status))
-    (is (re-seq #"EOF while reading" (first (repl-values session "(.getMessage *e)"))))))
+    (is (re-seq #"ReaderException" (first (repl-values session "(.Message *e)"))))))             ;;; .getMessage -- #"EOF while reading"
 
 (def-repl-test switch-ns
   (is (= "otherns" (-> (repl-eval session "(ns otherns) (defn function [] 12)")
@@ -226,7 +227,7 @@
            :status))))
 
 (def-repl-test proper-response-ordering
-  (is (= [[nil "100\n"] ; printed number
+  (is (= [[nil (platform-newlines "100\n")] ; printed number                          ;DM: Added platform-newlines
           ["nil" nil] ; return val from println
           ["42" nil]  ; return val from `42`
           [nil nil]]  ; :done
@@ -260,26 +261,26 @@
 (def-repl-test concurrent-message-handling
   (testing "multiple messages can be handled on the same connection concurrently"
     (let [sessions (doall (repeatedly 3 #(client-session client)))
-          start-time (Environment/TickCount)                                                                      ;DM: System/currentTimeMillis
+          start-time (Environment/TickCount)                                                            ;DM: System/currentTimeMillis
           elapsed-times (map (fn [session eval-duration]
-                               (let [expr (pr-str `(System.Threading.Thread/Sleep ~eval-duration))                ;DM: Thread/sleep
+                               (let [expr (pr-str `(System.Threading.Thread/Sleep ~eval-duration))      ;DM: Thread/sleep
                                      responses (message session {:op :eval :code expr})]
                                  (future
                                    (is (= [nil] (response-values responses)))
-                                   (- (Environment/TickCount) start-time))))                                      ;DM: System/currentTimeMillis
+                                   (- (Environment/TickCount) start-time))))                            ;DM: System/currentTimeMillis
                              sessions
                              [2000 1000 0])]
       (is (apply > (map deref (doall elapsed-times)))))))
 
 (def-repl-test ensure-transport-closeable
   (is (= [5] (repl-values session "5")))
-  (is (instance? IDisposable transport))                                                                         ;DM: java.io.Closeable
-  (.Dispose transport)                                                                                             ;DM: .close
-  (is (thrown? SocketException (repl-values session "5"))))                                                      ;DM: java.net.SocketException
+  (is (instance? IDisposable transport))                                              ;DM: java.io.Closeable
+  (.Dispose transport)                                                                ;DM: .close
+  (is (thrown? ObjectDisposedException (repl-values session "5"))))                   ;DM: java.net.SocketException
 
 ; test is flaking on hudson, but passing locally! :-X
 #_(def-repl-test ensure-server-closeable
-  (.Dispose *server*)                                                                                           ;DM: .close
+  (.Dispose *server*)                                                                 ;DM: .close
   (is (thrown? java.net.ConnectException (connect :port (:port *server*)))))
 
 ; wasn't added until Clojure 1.3.0
@@ -295,8 +296,8 @@
 (defn- disconnection-exception?
   [e]
   ; thrown? should check for the root cause!
-  (and (instance? SocketException (root-cause e))
-       (re-matches #".*lost.*connection.*" (.Message (root-cause e)))))                                  ;DM: .getMessage
+  (and (instance? ObjectDisposedException (root-cause e))                ;DM: SocketException
+       (re-find #"Cannot access.*" (.Message (root-cause e)))))          ;DM: re-matches .getMessage   #".*lost.*connection.*"
 
 (deftest transports-fail-on-disconnects
   (testing "Ensure that transports fail ASAP when the server they're connected to goes down."
@@ -315,12 +316,12 @@
           (catch Exception e                                                                        ;DM: Throwable
             (is (disconnection-exception? e)))))
 
-      (is (thrown? SocketException (transport/recv transport)))
+      (is (thrown? ObjectDisposedException (transport/recv transport)))                             ;DM: SocketException
       ;; TODO no idea yet why two sends are *sometimes* required to get a failure
       (try
         (transport/send transport {"op" "eval" "code" "(+ 5 1)"})
         (catch Exception t))                                                                        ;DM: Throwable
-      (is (thrown? SocketException (transport/send transport {"op" "eval" "code" "(+ 5 1)"}))))))
+      (is (thrown? ObjectDisposedException (transport/send transport {"op" "eval" "code" "(+ 5 1)"}))))))   ;DM: SocketException
 
 (def-repl-test clients-fail-on-disconnects
   (testing "Ensure that clients fail ASAP when the server they're connected to goes down."
@@ -340,7 +341,7 @@
     ;; TODO as noted in transports-fail-on-disconnects, *sometimes* two sends are needed
     ;; to trigger an exception on send to an unavailable server
     (try (repl-eval session "(+ 1 1)") (catch Exception t))                                       ;DM: Throwable
-    (is (thrown? SocketException (repl-eval session "(+ 1 1)")))))
+    (is (thrown? ObjectDisposedException (repl-eval session "(+ 1 1)")))))                        ;DM: SocketException
 
 (def-repl-test request-*in*
   (is (= '((1 2 3)) (response-values (for [resp (repl-eval session "(read)")]
