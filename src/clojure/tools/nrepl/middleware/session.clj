@@ -74,7 +74,7 @@
 		newline (Environment/NewLine)
 		nl-len (.Length newline)
 		send-segment (fn [^String segment]
-		               (debug/prn-thread "Sending " segment)
+		               #_(debug/prn-thread "Sending " segment)
                        (t/send (or (:transport *msg*) transport)
                                (response-for *msg* :session session-id
                                              channel-type segment)))
@@ -135,20 +135,20 @@
   [session-id transport]
   (let [input-queue (|System.Collections.Concurrent.BlockingCollection`1[System.Object]|.)            ;DM: LinkedBlockingQueue.
         request-input (fn []
-		                (debug/prn-thread "Request input")
+		                #_(debug/prn-thread "Request input")
                         (cond (> (.Count input-queue) 0)                                ;DM: .size
                                 (.Take input-queue)                                     ;DM: .take
                               *skipping-eol*
                                 nil
                               :else
                                 (do
-								  (debug/prn-thread "Sending message")
+								  #_(debug/prn-thread "Sending message")
                                   (t/send transport
                                           (response-for *msg* :session session-id
                                                         :status :need-input))
                                   (.Take input-queue))))                                ;DM: .take
         do-read (fn [buf off len]
-		          (debug/prn-thread "do-read")
+		          #_(debug/prn-thread "do-read")
                   (locking input-queue
                     (loop [i off]
                       (cond
@@ -165,7 +165,7 @@
 				   (Peek [] -1)                                                         ;DM: ADDED  -- we'll just say we don't support it 
                    (Read                                                                ;DM: read
                      ([]
-					   (debug/prn-thread "Read[]")
+					   #_(debug/prn-thread "Read[]")
                        (let [first-character (request-input)]                           ;DM: (let [^Reader this this] (proxy-super read))
                          (if (or (nil? first-character) (= first-character -1))         ;DM: [x]
                            (int -1)                                                     ;DM: let [^Reader this this]
@@ -173,7 +173,7 @@
                                                                                         ;DM:    proxy-super read ^java.nio.CharBuffer x
                                                                                         ;DM:    proxy-super read ^chars x
                      ([^chars buf off len]
-					   (debug/prn-thread "Read[3]")
+					   #_(debug/prn-thread "Read[3]")
                       (if (zero? len)
                         -1
                         (let [first-character (request-input)]
@@ -227,6 +227,7 @@
 (defn- close-session
   "Drops the session associated with the given message."
   [{:keys [session transport] :as msg}]
+  #_(debug/prn-thread "close-session" (-> session meta :id)) ;DEBUG
   (swap! sessions dissoc (-> session meta :id))
   (t/send transport (response-for msg :status #{:done :session-closed})))
 

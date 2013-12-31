@@ -17,7 +17,7 @@
 (defn handle*
   [msg handler transport]
   (try
-    (debug/prn-thread "handle* " msg) ;DEGUG
+    #_(debug/prn-thread "handle* " msg) ;DEBUG
     (handler (assoc msg :transport transport))
     (catch Exception t                                                       ;DM: Throwable
       (log t "Unhandled REPL handler exception processing message" msg))))
@@ -27,6 +27,7 @@
    Returns nil when [recv] returns nil for the given transport."
   [handler transport]
   (when-let [msg (t/recv transport)]
+    #_(debug/prn-thread "handle posting future for " msg) ;DEBUG
     (future (handle* msg handler transport))
     (recur handler transport)))
 
@@ -35,6 +36,7 @@
     :as server}]
   (when (.IsBound server-socket)                                                      ;DM: when-not (.isClosed server-socket)
     (let [sock (.Accept server-socket)]                                               ;DM: .accept
+	  #_(debug/prn-thread "Accepting connection")  ;DEBUG
       (future (let [transport (transport sock)]
                 (try
                   (swap! open-transports conj transport)
@@ -42,6 +44,7 @@
                   (handle handler transport)
                   (finally
                     (swap! open-transports disj transport)
+					#_(debug/prn-thread "Accepting connection: closing transport")  ;DEBUG
                     (.close transport)))))
       (future (accept-connection server)))))
 
@@ -56,6 +59,7 @@
   "Stops a server started via `start-server`."
   [{:keys [open-transports ^Socket server-socket] :as server}]             ;DM: ^ServerSocket
   (returning server
+    #_(debug/prn-thread "Stoping server " (:port server)) ;DEBUG
     (when (.Connected server-socket)                                       ;DM: ADDED
 	  (.Shutdown server-socket SocketShutdown/Both))                       ;DM: ADDED
     (.Close server-socket)                                                 ;DM: .close
@@ -72,7 +76,11 @@
 (defn unknown-op
   "Sends an :unknown-op :error for the given message."
   [{:keys [op transport] :as msg}]
-  (t/send transport (response-for msg :status #{:error :unknown-op :done} :op op)))
+  ;;;(t/send transport (response-for msg :status #{:error :unknown-op :done} :op op))
+  (let [r (response-for msg :status #{:error :unknown-op :done} :op op)]
+    (debug/prn-thread "*** UNKNOWN-OP: " r)
+	(t/send transport r)))
+  
 
 (def default-middlewares
   [#'clojure.tools.nrepl.middleware/wrap-describe
@@ -149,6 +157,7 @@
                           (or handler (default-handler)))
                  ;; TODO here for backward compat with 0.2.x; drop eventually
                  :ss ss)]
+	#_(debug/prn-thread "Starting server " server) ;DEBUG
     (.Listen ss 0)                                                                   ;DM: ADDED
     (future (accept-connection server))
     (when ack-port

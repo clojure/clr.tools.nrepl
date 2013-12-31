@@ -40,14 +40,14 @@
   (let [latest-head (atom nil)
         update #(swap! latest-head
                        (fn [[timestamp seq :as head] now]
-					     (debug/prn-thread "client::update ") ;DEBUG
+					     #_(debug/prn-thread "client::update ") ;DEBUG
                          (if (< timestamp now)
                            [now %]
                            head))
                        ; nanoTime appropriate here; looking to maintain ordering, not actual timestamps
                        (.ElapsedTicks sw))                                      ;DM: (System/nanoTime))
         tracking-seq (fn tracking-seq [responses]
-		               (debug/prn-thread "client:: tracking seq") ;DEBUG
+		               #_(debug/prn-thread "client:: tracking seq") ;DEBUG
                        (lazy-seq
                          (if (seq responses)
                            (let [rst (tracking-seq (rest responses))]
@@ -57,16 +57,16 @@
         restart #(let [head (-> transport
                               (response-seq response-timeout)
                               tracking-seq)]
-			       (debug/prn-thread "client:: restart") ;DEBUG
+			       #_(debug/prn-thread "client:: restart") ;DEBUG
                    (reset! latest-head [0 head])
                    head)]
     ^{::transport transport ::timeout response-timeout}
     (fn this
-      ([] (debug/prn-thread "client:: []") ;DEBUG
+      ([] #_(debug/prn-thread "client:: []") ;DEBUG
 	      (or (second @latest-head)
               (restart)))
       ([msg]
-	     (debug/prn-thread "client: [" msg "]") ;DEGBUG
+	     #_(debug/prn-thread "client: [" msg "]") ;DEGBUG
         (transport/send transport msg)
         (this)))))
 
@@ -97,9 +97,9 @@
    messages related to the message :id that will terminate upon receipt of a
    \"done\" :status."
   [client {:keys [id] :as msg :or {id (uuid)}}]
-  (debug/prn-thread "message:: sending:" msg)  ;DEBUG
+  #_(debug/prn-thread "message:: sending:" msg)  ;DEBUG
   (let [f (delimited-transport-seq client #{"done"} {:id id})]
-    (debug/prn-thread "message:: Have f") ;DEBUG
+    #_(debug/prn-thread "message:: Sending to f") ;DEBUG
     (f (assoc msg :id id))))
 
 (defn new-session
@@ -107,6 +107,7 @@
    of an existing retained session, the id of which must be provided as a :clone
    kwarg.  Returns the new session's id."
   [client & {:keys [clone]}]
+  #_(debug/prn-thread "new-session: " (merge {:op "clone"} (when clone {:session clone})))  ;DEBUG
   (let [resp (first (message client (merge {:op "clone"} (when clone {:session clone}))))]
     (or (:new-session resp)
         (throw (InvalidOperationException.                                                ;DM: IllegalStateException.
@@ -120,7 +121,7 @@
    closed."
   [client & {:keys [session clone]}]
   (let [session (or session (apply new-session client (when clone [:clone clone])))]
-    (debug/prn-thread "client-session:: have session") ;DEBUG
+    #_(debug/prn-thread "client-session:: have session") ;DEBUG
     (delimited-transport-seq client #{"session-closed"} {:session session})))
 
 (defn combine-responses
