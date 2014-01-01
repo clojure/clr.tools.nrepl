@@ -243,9 +243,9 @@
   (let [resp (message session {:op :eval :code (code (do
                                                        (def halted? true)
                                                        halted?
-                                                       (Thread/Sleep 30000)             ;DM: Thread/sleep
+                                                       (System.Threading.Thread/Sleep 30000)             ;DM: Thread/sleep
                                                        (def halted? false)))})]
-    (Thread/Sleep 100)                                                                  ;DM: Thread/sleep
+    (Thread/Sleep 100)                                                                  ;DM: sleep
     (is (= #{"done"} (-> session (message {:op :interrupt}) first :status set)))
     (is (= #{"done" "interrupted"} (-> resp combine-responses :status)))
     (is (= [true] (repl-values session "halted?")))))
