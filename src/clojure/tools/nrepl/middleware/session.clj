@@ -309,7 +309,7 @@
       (= op "stdin")
         (let [q (-> (meta session) ^TextWriter (:input-queue))]                                ;DM: ^Writer
           (locking q
-            (doseq [c stdin] (.put q c)))
+            (doseq [c stdin] (.Add q c)))                                                      ;DM: .put
           (t/send transport (response-for msg :status :done)))
       :else
         (h msg))))

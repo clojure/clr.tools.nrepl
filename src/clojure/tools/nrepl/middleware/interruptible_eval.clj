@@ -197,7 +197,7 @@
               (t/send transport {:status #{:interrupted}
                                  :id (:id eval-msg)
                                  :session id})
-              (.stop thread)
+              (.Abort thread)                                                   ;DM: .stop
               (t/send transport (response-for msg :status #{:done}))))
           (t/send transport (response-for msg :status #{:error :interrupt-id-mismatch :done}))))
       
