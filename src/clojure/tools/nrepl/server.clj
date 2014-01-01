@@ -17,7 +17,7 @@
 (defn handle*
   [msg handler transport]
   (try
-    #_(debug/prn-thread "handle* " msg) ;DEBUG
+    #_(debug/prn-thread "handle* " msg ", transport " (.GetHashCode transport)) ;DEBUG
     (handler (assoc msg :transport transport))
     (catch Exception t                                                       ;DM: Throwable
       (log t "Unhandled REPL handler exception processing message" msg))))
@@ -38,19 +38,21 @@
     (let [sock (.Accept server-socket)]                                               ;DM: .accept
 	  #_(debug/prn-thread "Accepting connection")  ;DEBUG
       (future (let [transport (transport sock)]
+				#_(debug/prn-thread "accept-connection: created transport " (.GetHashCode transport))  ;DEBUG
                 (try
                   (swap! open-transports conj transport)
                   (when greeting (greeting transport))
                   (handle handler transport)
                   (finally
                     (swap! open-transports disj transport)
-					#_(debug/prn-thread "Accepting connection: closing transport")  ;DEBUG
+					#_(debug/prn-thread "accept-connection: closing transport " (.GetHashCode transport))  ;DEBUG
                     (.close transport)))))
       (future (accept-connection server)))))
 
 (defn- safe-close
   [^IDisposable x]                                                              ;DM: ^java.io.Closeable
   (try
+    #_(debug/prn-thread "safe-close: Disposing a " (class x) " " (.GetHashCode x))
     (.Dispose x)                                                                ;DM: .close
     (catch Exception e                                                          ;DM: java.io.IOException
       (log e "Failed to close " x))))
@@ -78,7 +80,7 @@
   [{:keys [op transport] :as msg}]
   ;;;(t/send transport (response-for msg :status #{:error :unknown-op :done} :op op))
   (let [r (response-for msg :status #{:error :unknown-op :done} :op op)]
-    (debug/prn-thread "*** UNKNOWN-OP: " r)
+    #_(debug/prn-thread "*** UNKNOWN-OP: " r)
 	(t/send transport r)))
   
 

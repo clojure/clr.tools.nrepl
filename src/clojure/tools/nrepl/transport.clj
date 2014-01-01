@@ -32,7 +32,7 @@
   (recv [this] #_(debug/prn-thread "FnTransprot:: recv ") (.recv this Int32/MaxValue))                                      ;DM: Long/MAX_VALUE
   (recv [this timeout] #_(debug/prn-thread "FnTransport:: recv [" timeout "]") (clojure.walk/keywordize-keys (recv-fn timeout)))
   System.IDisposable                                                             ;DM: java.io.Closeable
-  (Dispose [this] (close)))                                                      ;DM: (close [this] (close)))  TODO: This violates good IDisposable practice
+  (Dispose [this] #_(debug/prn-thread "FNTranpsort:: Dispose " (.GetHashCode this)) (close)))                                                      ;DM: (close [this] (close)))  TODO: This violates good IDisposable practice
 
 (defn fn-transport
   "Returns a Transport implementation that delegates its functionality
@@ -87,10 +87,10 @@
   `(try
      ~@body
      (catch EndOfStreamException e#                                        ;DM: EOFException
-       (throw (ObjectDisposedException. "The transport's socket appears to have lost its connection to the nREPL server")))
+       (throw (ObjectDisposedException. "The transport's socket appears to have lost its connection to the nREPL server" e#)))
      (catch Exception e#                                                   ;DM: Throwable
        (if (and ~s (not (.Connected ~s)))                                  ;DM: .isConnected
-         (throw (ObjectDisposedException. "The transport's socket appears to have lost its connection to the nREPL server"))
+         (throw (ObjectDisposedException. "The transport's socket appears to have lost its connection to the nREPL server" e#))
          (throw e#)))))
 
 (defn bencode

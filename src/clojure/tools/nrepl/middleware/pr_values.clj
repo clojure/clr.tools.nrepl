@@ -1,7 +1,8 @@
 
 (ns ^{:author "Chas Emerick"}
      clojure.tools.nrepl.middleware.pr-values
-  (:require [clojure.tools.nrepl.transport :as t])
+  (:require [clojure.tools.nrepl.transport :as t]
+  			[clojure.tools.nrepl.debug :as debug])                ;DM: Added
   (:use [clojure.tools.nrepl.middleware :only (set-descriptor!)])
   (:import clojure.tools.nrepl.transport.Transport))
 
@@ -14,15 +15,19 @@
    :value slot."
   [h]
   (fn [{:keys [op ^Transport transport] :as msg}]
-    (h (assoc msg :transport (reify Transport
+    (h (assoc msg :transport (let [wt (reify Transport
                                (recv [this] (.recv transport))
                                (recv [this timeout] (.recv transport timeout))
                                (send [this resp]
+							     #_(debug/prn-thread "pr-values - sending on to " (.GetHashCode transport))
                                  (.send transport
                                    (if-let [[_ v] (find resp :value)]
                                      (assoc resp :value (with-out-str (pr v)))
                                      resp))
-                                 this))))))
+                                 this))]
+								 #_(debug/prn-thread "pr-values - reify, wrapping " (.GetHashCode wt) " around " (.GetHashCode transport)) 
+								  wt)
+								 ))))
 
 (set-descriptor! #'pr-values
   {:requires #{}
