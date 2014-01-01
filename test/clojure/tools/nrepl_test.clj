@@ -1,5 +1,5 @@
 (ns clojure.tools.nrepl-test
-  (:import System.Threading.Thread System.IO.FileInfo)           ;DM: java.net.SocketException java.io.File
+  (:import System.Threading.Thread System.Net.Sockets.SocketException System.IO.FileInfo)           ;DM: java.net.SocketException java.io.File
   (:use clojure.test
         [clojure.test-helper :only [platform-newlines]]          ;DM: Added
         [clojure.tools.nrepl :as nrepl])
@@ -112,7 +112,8 @@
                                 "session" sid})
     (is (->> (repeatedly #(transport/recv transport2 1000))
           (take-while identity)
-          (some #(= (platform-newlines ":foo\n") (:out %)))))))                ;DM: Added platform-newlines
+          (some #(= (platform-newlines ":foo\n") (:out %))))))                ;DM: Added platform-newlines
+  (Thread/Sleep 100))                                                        ;DM: Added sleep so client completes before server closes
 
 (def-repl-test streaming-out
   (is (= (for [x (range 10)]
@@ -224,7 +225,8 @@
   (is (= #{"error" "namespace-not-found" "done"}
          (-> (message timeout-client {:op :eval :code "(+ 1 1)" :ns (name (gensym))})
            combine-responses
-           :status))))
+           :status)))
+  (Thread/Sleep 100))                         ;DM: Added -- need a little time for the client to complete before the server shuts down
 
 (def-repl-test proper-response-ordering
   (is (= [[nil (platform-newlines "100\n")] ; printed number                          ;DM: Added platform-newlines
@@ -296,8 +298,11 @@
 (defn- disconnection-exception?
   [e]
   ; thrown? should check for the root cause!
-  (and (instance? ObjectDisposedException (root-cause e))                ;DM: SocketException
-       (re-find #"Cannot access.*" (.Message (root-cause e)))))          ;DM: re-matches .getMessage   #".*lost.*connection.*"
+  (or (and (instance? ObjectDisposedException (root-cause e))               ;DM: Added
+           (re-find #"Cannot access.*" (.Message (root-cause e))))          ;DM: Added
+	  (and (instance? SocketException (root-cause e))
+	       (re-find #".*closed.*" (.Message (root-cause e))))))             ;DM: re-matches .getMessage   #".*lost.*connection.*"
+
 
 (deftest transports-fail-on-disconnects
   (testing "Ensure that transports fail ASAP when the server they're connected to goes down."
@@ -332,7 +337,9 @@
       (Thread/Sleep 1000)                                                                           ;DM: Thread/sleep
       (try
         ; these responses were on the wire before the remote transport was closed
-        (is (> 20 (count resp)))
+        ;;(is (> 20 (count resp)))                                                                 ;DM: This blows up in LazySeq
+		(let [c (count resp)]                                                                      ;DM: this works
+		  (is (> 20 c)))                                                                           ;DM: Why here?
         (transport/recv transport)
         (is false "reads after the server is closed should fail")
         (catch Exception t                                                                         ;DM: Throwable
