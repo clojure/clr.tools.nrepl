@@ -46,7 +46,7 @@
   			      (sc/put read-queue (read))                                       ;DM: .put
 				  #_(debug/prn-thread "fn-transport:: put to queue"))   ;DEBUG 
                 (catch Exception t                                                ;DM: Throwable
-				  (debug/prn-thread "fn-transport:: caught exception!!!!")
+				  #_(debug/prn-thread "fn-transport:: caught exception!!!!")
                   (sc/put read-queue t))))                                        ;DM: .put
       (FnTransport.
         (let [failure (atom nil)]
@@ -55,7 +55,7 @@
              (let [msg (sc/poll read-queue % )]                                   ;DM:  .poll, remove TimeUnit/MILLISECONDS
 			   #_(debug/prn-thread "fn-transport:: read from queue: " (let [mstr (str msg)] (if (< (count mstr) 75) mstr (subs mstr 0 75)))) ;DEBUG
                (if (instance? Exception msg)                                      ;DM: Throwable
-                 (do (debug/prn-thread "fn-transport:: read Exception: " (let [mstr (str msg)] (if (< (count mstr) 75) mstr (subs mstr 0 75)))) (reset! failure msg) (throw msg))
+                 (do #_(debug/prn-thread "fn-transport:: read Exception: " (let [mstr (str msg)] (if (< (count mstr) 75) mstr (subs mstr 0 75)))) (reset! failure msg) (throw msg))
                  msg))))
         write
         close))))
@@ -88,10 +88,10 @@
      #_(debug/prn-thread "rethrow-on-disconnection: begin body, socket = " (.GetHashCode ~s))
      ~@body
      (catch EndOfStreamException e#                                        ;DM: EOFException
-	   (debug/prn-thread "rethrow-on-disconnection: EndOfStreamException, socket = " (.GetHashCode ~s))
+	   #_(debug/prn-thread "rethrow-on-disconnection: EndOfStreamException, socket = " (.GetHashCode ~s))
        (throw (ObjectDisposedException. "The transport's socket appears to have lost its connection to the nREPL server" e#)))
      (catch Exception e#                                                   ;DM: Throwable
-       (debug/prn-thread "rethrow-on-disconnection: Exception: socket = " (.GetHashCode ~s) ", connected = "(and ~s (not (.Connected ~s))))
+       #_(debug/prn-thread "rethrow-on-disconnection: Exception: socket = " (.GetHashCode ~s) ", connected = "(and ~s (not (.Connected ~s))))
        (if (or (instance? SocketException (#'clojure.main/root-cause e#))
 	           (and ~s (not (.Connected ~s))))                                  ;DM: .isConnected
          (throw (ObjectDisposedException. "The transport's socket appears to have lost its connection to the nREPL server" e#))

@@ -41,7 +41,7 @@
       (t/send transport (response-for msg {:status #{:error :namespace-not-found :done}}))
       (with-bindings @bindings
         (try
-		  (debug/prn-thread "Evaluating " code " in " (.ManagedThreadId (Thread/CurrentThread))) ;DEBUG
+		  #_(debug/prn-thread "Evaluating " code " in " (.ManagedThreadId (Thread/CurrentThread))) ;DEBUG
           (clojure.main/repl
             ;; clojure.main/repl paves over certain vars even if they're already thread-bound
             :init #(do (set! *compile-path* (@bindings #'*compile-path*))
@@ -64,7 +64,7 @@
                                              #'*1 v))
                      (.Flush ^TextWriter err)                                                   ;DM: .flush ^Writer
                      (.Flush ^TextWriter out)                                                   ;DM: .flush ^Writer
-					 (debug/prn-thread "Evaluating " code " yields " v) ;DEBUG
+					 #_(debug/prn-thread "Evaluating " code " yields " v) ;DEBUG
                      (t/send transport (response-for msg
                                                      {:value v
                                                       :ns (-> *ns* ns-name str)})))
@@ -120,18 +120,18 @@
 #_(defn- exec-eval [f]
   (let [tstart (gen-delegate ThreadStart []
                  (try 
-				  (debug/prn-thread "exec-eval: Starting in thread " (.ManagedThreadId (Thread/CurrentThread)))
+				  #_(debug/prn-thread "exec-eval: Starting in thread " (.ManagedThreadId (Thread/CurrentThread)))
 				  (f) 
-				  (debug/prn-thread "exec-eval: Exiting thread " (.ManagedThreadId (Thread/CurrentThread)))
+				  #_(debug/prn-thread "exec-eval: Exiting thread " (.ManagedThreadId (Thread/CurrentThread)))
 				  (catch ThreadAbortException e 
-				    (debug/prn-thread "exec-eval: Aborting thread " (.ManagedThreadId (Thread/CurrentThread)))
+				    #_(debug/prn-thread "exec-eval: Aborting thread " (.ManagedThreadId (Thread/CurrentThread)))
 					#_(Thread/ResetAbort)
 					nil)))
         thread (doto (Thread. tstart)
                  (.set_Name (format "nREPL-worker-%s" (.getAndIncrement session-thread-counter)))
 	             (.set_IsBackground true)
 	             (.Start))]
-	 (debug/prn-thread "exec-eval: Started thread " (.ManagedThreadId thread))
+	 #_(debug/prn-thread "exec-eval: Started thread " (.ManagedThreadId thread))
 	 nil))
 	
 (defn- exec-eval [f interrupt-handle]
@@ -139,11 +139,11 @@
         handles (make-array System.Threading.WaitHandle 2)
         tstart (gen-delegate ThreadStart []
                  (try 
-				  (debug/prn-thread "exec-eval: Starting in thread " (.ManagedThreadId (Thread/CurrentThread)))
+				  #_(debug/prn-thread "exec-eval: Starting in thread " (.ManagedThreadId (Thread/CurrentThread)))
 				  (f) 
-				  (debug/prn-thread "exec-eval: Exiting thread " (.ManagedThreadId (Thread/CurrentThread)))
+				  #_(debug/prn-thread "exec-eval: Exiting thread " (.ManagedThreadId (Thread/CurrentThread)))
 				  (catch ThreadAbortException e 
-				    (debug/prn-thread "exec-eval: Aborting thread " (.ManagedThreadId (Thread/CurrentThread)))
+				    #_(debug/prn-thread "exec-eval: Aborting thread " (.ManagedThreadId (Thread/CurrentThread)))
 					(Thread/ResetAbort)
 					nil)
 				  (finally (.Set done-handle))))
@@ -151,16 +151,16 @@
                  (.set_Name (format "nREPL-worker-%s" (.getAndIncrement session-thread-counter)))
 	             (.set_IsBackground true)
 	             (.Start))]
-	 (debug/prn-thread "exec-eval: Started thread " (.ManagedThreadId thread))
-	 (debug/prn-thread "exec-eval: Starting wait")
+	 #_(debug/prn-thread "exec-eval: Started thread " (.ManagedThreadId thread))
+	 #_(debug/prn-thread "exec-eval: Starting wait")
 	 (aset handles 0 interrupt-handle)
 	 (aset handles 1 done-handle)
 	 (let [i (System.Threading.WaitHandle/WaitAny handles)]
-	   (debug/prn-thread "exec-eval: done waiting, handle = " i)
+	   #_(debug/prn-thread "exec-eval: done waiting, handle = " i)
 	   (when (= i 0)
-	     (debug/prn-thread "exec-eval: interrupted, aborting thread")
+	     #_(debug/prn-thread "exec-eval: interrupted, aborting thread")
 	     (.Abort thread))
-	   (when (= i 1)
+	   #_(when (= i 1)
 	     (debug/prn-thread "exec.eval: normal exit")))
 	 nil))
 		
@@ -193,11 +193,11 @@
 (defn- run-next
   [session executor ihandle f]
   #(try
-     (debug/prn-thread "run-next: ready to run f, thread = " (.ManagedThreadId (Thread/CurrentThread)))
+     #_(debug/prn-thread "run-next: ready to run f, thread = " (.ManagedThreadId (Thread/CurrentThread)))
      (f)
-	 (debug/prn-thread "run-next: after running f, thread = " (.ManagedThreadId (Thread/CurrentThread)))
+	 #_(debug/prn-thread "run-next: after running f, thread = " (.ManagedThreadId (Thread/CurrentThread)))
      (finally
-       (debug/prn-thread "run-next: looping, thread = " (.ManagedThreadId (Thread/CurrentThread)))
+       #_(debug/prn-thread "run-next: looping, thread = " (.ManagedThreadId (Thread/CurrentThread)))
        (run-next* session executor ihandle))))
 
 (defn- queue-eval
@@ -236,9 +236,7 @@
               (binding [*msg* msg]
 			    #_(debug/prn-thread "IEval: getting ready to call evaluate, thread = " (.ManagedThreadId (Thread/CurrentThread)))
                 (returning (dissoc (evaluate @session msg) #'*msg*)
-				  (debug/prn-thread "IEval: sending status done")
-				  (t/send transport (response-for msg :status :done))
-                  (debug/prn-thread "IEval: sending status done again")
+				  #_(debug/prn-thread "IEval: sending status done")
 				  (t/send transport (response-for msg :status :done))
                   (alter-meta! session dissoc :thread :eval-msg :ihandle)))))))
       
@@ -248,9 +246,9 @@
       ; that message's eval to finish and another to start before we send
       ; the interrupt / .stop.
       (let [{:keys [id eval-msg ihandle]} (meta session)]  ;;; ^Thread thread
-	    (debug/prn-thread "IEval: interrupt received")
-		(debug/prn-thread "IEval: interrupt-id = " interrupt-id ", id = " (:id eval-msg))
-		(debug/prn-thread "IEval: ihandle = " ihandle)
+	    #_(debug/prn-thread "IEval: interrupt received")
+		#_(debug/prn-thread "IEval: interrupt-id = " interrupt-id ", id = " (:id eval-msg))
+		#_(debug/prn-thread "IEval: ihandle = " ihandle)
 		#_(debug/prn-thread "IEval: interrupt thread = " (and thread (.ManagedThreadId thread)))
 		#_(if (or (not interrupt-id)
                 (= interrupt-id (:id eval-msg)))
@@ -266,17 +264,17 @@
               ; notify of the interrupted status before we .stop the thread so
               ; it is received before the standard :done status (thereby ensuring
               ; that is stays within the scope of a clojure.tools.nrepl/message seq)
-			  (debug/prn-thread "IEval: interrupt: sending :interrupted status message")
+			  #_(debug/prn-thread "IEval: interrupt: sending :interrupted status message")
               (t/send transport {:status #{:interrupted}
                                  :id (:id eval-msg)
                                  :session id})
-			  (debug/prn-thread "IEval: interrupt: preparing to abort thread " #_(.ManagedThreadId thread))			  
+			  #_(debug/prn-thread "IEval: interrupt: preparing to abort thread " #_(.ManagedThreadId thread))			  
               #_(.Abort thread)                                                   ;DM: .stop
 			  (.Set ihandle)
-			  (debug/prn-thread "IEval: interrupt: thread .Abort called")
-			  (debug/prn-thread "IEval: interrupt: preparing to send :done status")
+			  #_(debug/prn-thread "IEval: interrupt: thread .Abort called")
+			  #_(debug/prn-thread "IEval: interrupt: preparing to send :done status")
               (t/send transport (response-for msg :status #{:done}))
-			  (debug/prn-thread "IEval: interrupt: preparing to send :done status AGAIN")
+			  #_(debug/prn-thread "IEval: interrupt: preparing to send :done status AGAIN")
               (t/send transport (response-for msg :status #{:done}))
 			  
 			  ))
