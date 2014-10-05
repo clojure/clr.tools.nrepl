@@ -326,7 +326,7 @@
   (or (and (instance? ObjectDisposedException (root-cause e))               ;DM: Added
            (re-find #"Cannot access.*" (.Message (root-cause e))))          ;DM: Added
 	  (and (instance? SocketException (root-cause e))
-	       (re-find #".*closed.*" (.Message (root-cause e))))))             ;DM: re-matches .getMessage   #".*lost.*connection.*"
+	       (re-find #".*closed.*" (.Message (root-cause e))))))             ;DM: re-matches .getMessage   #".*(lost.*connection|socket closed).*"
 
 
 (deftest transports-fail-on-disconnects

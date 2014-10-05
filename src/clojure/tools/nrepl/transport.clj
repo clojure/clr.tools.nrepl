@@ -121,9 +121,11 @@
                (be/write-bencode %)
                .Flush)))                                                  ;DM: .flush
         (fn []
-          (.Close in)                                                     ;DM: .close
-          (.Close out)                                                    ;DM: .close
-          (when s (.Close s)))))))                                        ;DM: .close
+          (if s
+            (.Close s)                                                    ;DM: .close
+            (do 
+              (.Close in)                                                 ;DM: .close
+              (.Close out))))))))                                         ;DM: .close
 
 (defn tty
   "Returns a Transport implementation suitable for serving an nREPL backend
