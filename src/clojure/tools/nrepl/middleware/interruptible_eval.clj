@@ -35,10 +35,11 @@
 
    It is assumed that `bindings` already contains useful/appropriate entries
    for all vars indicated by `clojure.main/with-bindings`."
-  [bindings {:keys [code ns transport eval] :as msg}]
+  [bindings {:keys [code ns transport session eval] :as msg}]
   (let [explicit-ns-binding (when-let [ns (and ns (-> ns symbol find-ns))]
                               {#'*ns* ns})
         bindings (atom (merge bindings explicit-ns-binding))
+        session (or session (atom nil))		
         out (@bindings #'*out*)
         err (@bindings #'*err*)]
     (if (and ns (not explicit-ns-binding))
@@ -69,6 +70,7 @@
                                              #'*1 v))
                      (.Flush ^TextWriter err)                                                   ;DM: .flush ^Writer
                      (.Flush ^TextWriter out)                                                   ;DM: .flush ^Writer
+                     (reset! session @bindings)					 
 					 #_(debug/prn-thread "Evaluating " code " yields " v) ;DEBUG
                      (t/send transport (response-for msg
                                                      {:value v
@@ -231,20 +233,16 @@
       (if-not (:code msg)
         (do #_(debug/prn-thread "IEval: no code: " msg) (t/send transport (response-for msg :status #{:error :no-code})))
         (queue-eval session executor interrupt-handle
-          (comp
-		    
-            (partial reset! session)
-            (fn []
-              (alter-meta! session assoc
-                           :thread (Thread/CurrentThread)                                  ;DM: Thread/currentThread
-						   :ihandle interrupt-handle
-                           :eval-msg msg)
-              (binding [*msg* msg]
+          (fn []
+            (alter-meta! session assoc
+                         :thread (Thread/CurrentThread)                                  ;DM: Thread/currentThread
+                         :eval-msg msg)
+            (binding [*msg* msg]
 			    #_(debug/prn-thread "IEval: getting ready to call evaluate, thread = " (.ManagedThreadId (Thread/CurrentThread)))
-                (returning (dissoc (evaluate @session msg) #'*msg*)
-				  #_(debug/prn-thread "IEval: sending status done")
-				  (t/send transport (response-for msg :status :done))
-                  (alter-meta! session dissoc :thread :eval-msg :ihandle)))))))
+              (returning (dissoc (evaluate @session msg) #'*msg*)
+ 			    #_(debug/prn-thread "IEval: sending status done")
+                (t/send transport (response-for msg :status :done))
+                (alter-meta! session dissoc :thread :eval-msg))))))		
       
       "interrupt"
       ; interrupts are inherently racy; we'll check the agent's :eval-msg's :id and
