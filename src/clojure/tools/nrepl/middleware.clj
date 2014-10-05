@@ -131,7 +131,7 @@
 
 ; oh, kill me now
 (defn- markdown-escape
-  [^String s]                                                                           ;DM: Added type hint
+  [^String s]
   (System.Text.RegularExpressions.Regex/Replace s "([*_])" "\\\\$1"))                 ;DM: (.replaceAll s "([*_])" "\\\\$1")
 
 (defn- message-slot-markdown

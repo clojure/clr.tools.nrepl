@@ -52,7 +52,7 @@
             :read (if (string? code)
                     (let [reader (LineNumberingTextReader. (StringReader. code))]               ;DM: LineNumberingPushbackReader
                       #(read reader false %2))
-                    (let [^System.Collections.IEnumerator code (.GetEnumerator code)]           ;DM: ^java.util.Iterator .iterator
+                    (let [^System.Collections.IEnumerator code (.GetEnumerator code)]           ;DM:  .iterator
                       #(or (and (.MoveNext code) (.Current code)) %2)))                         ;DM: .hasNext .next
             :prompt (fn [])
             :need-prompt (constantly false)
@@ -107,12 +107,13 @@
 ;  [& {:keys [keep-alive queue thread-factory]
 ;      :or {keep-alive 30000
 ;           queue (SynchronousQueue.)}}]
-;  ; ThreadPoolExecutor in JDK5 *will not run* submitted jobs if the core pool size is zero and
-;  ; the queue has not yet rejected a job (see http://kirkwylie.blogspot.com/2008/10/java5-vs-java6-threadpoolexecutor.html)
-;  (ThreadPoolExecutor. (if jdk6? 0 1) Integer/MAX_VALUE
-;                       (long 30000) TimeUnit/MILLISECONDS
-;                       queue
-;                       (or thread-factory (configure-thread-factory))))
+;  (let [^ThreadFactory thread-factory (or thread-factory (configure-thread-factory))]
+;    ; ThreadPoolExecutor in JDK5 *will not run* submitted jobs if the core pool size is zero and
+;    ; the queue has not yet rejected a job (see http://kirkwylie.blogspot.com/2008/10/java5-vs-java6-threadpoolexecutor.html)
+;    (ThreadPoolExecutor. (if jdk6? 0 1) Integer/MAX_VALUE
+;                         (long 30000) TimeUnit/MILLISECONDS
+;                         ^BlockingQueue queue
+;                         thread-factory)))
 
 ;DM:Added
 (def ^{:private true} session-thread-counter (AtomicLong. 0))
