@@ -115,11 +115,18 @@
 (defrecord Server [server-socket port open-transports transport greeting handler]
   IDisposable                                                                                      ;DM: java.io.Closeable
   (Dispose [this] (stop-server this))                                                              ;DM: (close [this] (stop-server this))
-  ;; TODO here for backward compat with 0.2.x; drop eventually
+  ;; TODO here for backward compat with 0.2.x; drop for 0.3.0; this is what's
+  ;; causing the print-method silliness below
   clojure.lang.IDeref
   (deref [this] this))
 
 (try
+  (require 'clojure.pprint)
+  (#'clojure.pprint/use-method
+    clojure.pprint/simple-dispatch
+    Server
+    #'clojure.pprint/pprint-simple-default)
+
   ; IRecord not available in 1.2.0
   (eval '(defmethod print-method Server
            [s w]
