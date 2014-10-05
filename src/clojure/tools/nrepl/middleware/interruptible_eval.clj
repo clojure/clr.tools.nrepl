@@ -300,7 +300,8 @@
              "interrupt"
              {:doc "Attempts to interrupt some code evaluation."
               :requires {"session" "The ID of the session used to start the evaluation to be interrupted."}
-              :optional {"interrupt-id" "The opaque message ID sent with the original \"eval\" request."}
+              :optional {"id" "An opaque message ID that will be included in responses related to the evaluation, and which may be used to restrict the scope of a later \"interrupt\" operation."
+                         "eval" "A fully-qualified symbol naming a var whose function value will be used to evaluate [code], instead of `clojure.core/eval` (the default)."}
               :returns {"status" "'interrupted' if an evaluation was identified and interruption will be attempted
 'session-idle' if the session is not currently evaluating any code
 'interrupt-id-mismatch' if the session is currently evaluating code sent using a different ID than specified by the \"interrupt-id\" value "}}}})
