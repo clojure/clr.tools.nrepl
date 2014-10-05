@@ -39,15 +39,15 @@
    to the 2 or 3 functions provided."
   ([read write] (fn-transport read write nil))
   ([read write close]
-    (let [read-queue (sc/make-simple-sync-channel)]                               ;DM: (SynchronousQueue.)
-      (future (try
-                (while true
-				  #_(debug/prn-thread "fn-transport:: ready to read")
-  			      (sc/put read-queue (read))                                       ;DM: .put
-				  #_(debug/prn-thread "fn-transport:: put to queue"))   ;DEBUG 
-                (catch Exception t                                                ;DM: Throwable
-				  #_(debug/prn-thread "fn-transport:: caught exception!!!!")
-                  (sc/put read-queue t))))                                        ;DM: .put
+    (let [read-queue (sc/make-simple-sync-channel)                                 ;DM: (SynchronousQueue.)
+	      msg-pump (future (try
+                             (while true
+				               #_(debug/prn-thread "fn-transport:: ready to read")
+  			                   (sc/put read-queue (read))                                       ;DM: .put
+				               #_(debug/prn-thread "fn-transport:: put to queue"))   ;DEBUG 
+                             (catch Exception t                                                ;DM: Throwable
+				               #_(debug/prn-thread "fn-transport:: caught exception!!!!")
+                              (sc/put read-queue t))))]                                        ;DM: .put
       (FnTransport.
         (let [failure (atom nil)]
           #(if @failure
@@ -58,7 +58,7 @@
                  (do #_(debug/prn-thread "fn-transport:: read Exception: " (let [mstr (str msg)] (if (< (count mstr) 75) mstr (subs mstr 0 75)))) (reset! failure msg) (throw msg))
                  msg))))
         write
-        close))))
+        (fn [] (close) (future-cancel msg-pump))))))
 
 (defmulti #^{:private true} <bytes class)
 
