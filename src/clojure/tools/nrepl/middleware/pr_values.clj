@@ -22,7 +22,11 @@
 							     #_(debug/prn-thread "pr-values - sending on to " (.GetHashCode transport))
                                  (.send transport
                                    (if-let [[_ v] (find resp :value)]
-                                     (assoc resp :value (with-out-str (pr v)))
+                                     (let [repr (System.IO.StringWriter.)]                        ;;; java.io.StringWriter.
+                                       (assoc resp :value (do (if *print-dup*
+                                                                (print-dup v repr)
+                                                                (print-method v repr))
+                                                              (str repr))))
                                      resp))
                                  this))]
 								 #_(debug/prn-thread "pr-values - reify, wrapping " (.GetHashCode wt) " around " (.GetHashCode transport)) 
