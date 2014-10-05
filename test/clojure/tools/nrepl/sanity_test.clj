@@ -18,7 +18,7 @@
             [clojure.set :as set])
    )                                                     ;DM: (:import (java.util.concurrent BlockingQueue LinkedBlockingQueue TimeUnit))
 
-(println (format "Testing with Clojure v%s on %s" (clojure-version) (Environment/GetEnvironmentVariable "java.version")))   ;DM: System/getProperty
+(println (format "Testing with Clojure v%s on %s" (clojure-version) (.ToString Environment/Version)))   ;DM: (System/getProperty "java.version")
 
 (defn- internal-eval
   ([expr] (internal-eval nil expr))
