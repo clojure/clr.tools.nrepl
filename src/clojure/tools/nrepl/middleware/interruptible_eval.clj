@@ -22,7 +22,8 @@
 	  
 (defn- capture-thread-bindings
   "Capture thread bindings, excluding nrepl implementation vars."
-  [] (dissoc (get-thread-bindings) #'*msg*))
+  []
+  (dissoc (get-thread-bindings) #'*msg* #'*eval*))
 
 (defn evaluate
   "Evaluates some code within the dynamic context defined by a map of `bindings`,
@@ -244,10 +245,11 @@
             (binding [*msg* msg]
 			    #_(debug/prn-thread "IEval: getting ready to call evaluate, thread = " (.ManagedThreadId (Thread/CurrentThread)))
               (returning (dissoc (evaluate @session msg) #'*msg*)
- 			    #_(debug/prn-thread "IEval: sending status done")
-                (t/send transport (response-for msg :status :done))
-                (alter-meta! session dissoc :thread :eval-msg))))))		
-      
+                (evaluate @session msg)
+			    #_(debug/prn-thread "IEval: sending status done")
+				(t/send transport (response-for msg :status :done))
+                (alter-meta! session dissoc :thread :eval-msg)))))			  
+    
       "interrupt"
       ; interrupts are inherently racy; we'll check the agent's :eval-msg's :id and
       ; bail if it's different than the one provided, but it's possible for

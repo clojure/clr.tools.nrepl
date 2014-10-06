@@ -5,7 +5,8 @@
         [clojure.tools.nrepl :as nrepl])
   (:require (clojure.tools.nrepl [transport :as transport]
                                  [server :as server]
-                                 [ack :as ack])))
+                                 [ack :as ack])
+            [clojure.set :as set]))
 
 (def project-base-dir (FileInfo. (or (Environment/GetEnvironmentVariable "nrepl.basedir") ".")))         ;DM: File.  System/getProperty
 
@@ -276,6 +277,15 @@
     (is (= #{"done"} (-> session (message {:op :interrupt}) first :status set)))
     #_(is (= #{"done" "interrupted"} (-> resp combine-responses :status)))   ;DM: BUG!!! I have no idea why this hangs
     (is (= [true] (repl-values session "halted?")))))
+
+; NREPL-66: ensure that bindings of implementation vars aren't captured by user sessions
+; (https://github.com/clojure-emacs/cider/issues/785)
+(def-repl-test ensure-no-*msg*-capture
+  (let [[r1 r2 :as results] (repeatedly 2 #(repl-eval session "(println :foo)"))
+        [ids ids2] (map #(set (map :id %)) results)
+        [out1 out2] (map #(-> % combine-responses :out) results)]
+    (is (empty? (clojure.set/intersection ids ids2)))
+    (is (= ":foo\n" out1 out2))))
 
 (def-repl-test read-timeout
   (is (nil? (repl-values timeout-session "(System.Threading.Thread/Sleep 1100) :ok")))                   ;DM: Thread/sleep
