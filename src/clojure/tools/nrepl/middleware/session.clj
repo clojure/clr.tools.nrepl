@@ -308,8 +308,10 @@
           (h msg))
       (= op "stdin")
         (let [q (-> (meta session) ^TextWriter (:input-queue))]                                ;DM: ^Writer
-          (locking q
-            (doseq [c stdin] (.Add q c)))                                                      ;DM: .put
+          (if (empty? stdin)
+            (.Add q -1)                                                                        ;DM: .put
+            (locking q
+              (doseq [c stdin] (.Add q c))))                                                  ;DM: .put
           (t/send transport (response-for msg :status :done)))
       :else
         (h msg))))
