@@ -243,12 +243,11 @@
                          :thread (Thread/CurrentThread)                                  ;DM: Thread/currentThread
                          :eval-msg msg)
             (binding [*msg* msg]
-			    #_(debug/prn-thread "IEval: getting ready to call evaluate, thread = " (.ManagedThreadId (Thread/CurrentThread)))
-              (returning (dissoc (evaluate @session msg) #'*msg*)
-                (evaluate @session msg)
-			    #_(debug/prn-thread "IEval: sending status done")
-				(t/send transport (response-for msg :status :done))
-                (alter-meta! session dissoc :thread :eval-msg)))))			  
+  		      #_(debug/prn-thread "IEval: getting ready to call evaluate, thread = " (.ManagedThreadId (Thread/CurrentThread)))
+              (evaluate @session msg)
+			  #_(debug/prn-thread "IEval: sending status done")
+			  (t/send transport (response-for msg :status :done))
+              (alter-meta! session dissoc :thread :eval-msg)))))			  
     
       "interrupt"
       ; interrupts are inherently racy; we'll check the agent's :eval-msg's :id and
