@@ -58,7 +58,7 @@
                  (do #_(debug/prn-thread "fn-transport:: read Exception: " (let [mstr (str msg)] (if (< (count mstr) 75) mstr (subs mstr 0 75)))) (reset! failure msg) (throw msg))
                  msg))))
         write
-        (fn [] (close) (future-cancel msg-pump))))))
+        (fn [] (close) #_(future-cancel msg-pump))))))
 
 (defmulti #^{:private true} <bytes class)
 
