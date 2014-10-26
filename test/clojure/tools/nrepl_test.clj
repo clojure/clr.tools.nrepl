@@ -128,7 +128,7 @@
                       (foo))
         results (-> (repl-eval session (pr-str expression))
                     combine-responses)]
-    (is (= "1\n" (:out results)))
+    (is (= (platform-newlines "1\n") (:out results)))                         ;DM: Added platform-newlines
     (is (re-seq #"oops" (:err results)))))
 
 (def-repl-test cross-transport-*out*
@@ -285,7 +285,7 @@
         [ids ids2] (map #(set (map :id %)) results)
         [out1 out2] (map #(-> % combine-responses :out) results)]
     (is (empty? (clojure.set/intersection ids ids2)))
-    (is (= ":foo\n" out1 out2))))
+    (is (= (platform-newlines ":foo\n") out1 out2))))                     ; DM: Added platform-newlines
 
 (def-repl-test read-timeout
   (is (nil? (repl-values timeout-session "(System.Threading.Thread/Sleep 1100) :ok")))                   ;DM: Thread/sleep
