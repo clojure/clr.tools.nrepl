@@ -213,7 +213,7 @@
 (def-repl-test multiple-expressions-return
   (is (= [5 18] (repl-values session "5 (/ 5 0) (+ 5 6 7)"))))
 
-(def-repl-test return-on-incomplete-expr
+(def-repl-test return-on-incomplete-expr                                                         ;DM: We are getting nil for *e so, re-seq is not happy in the test.  Why?
   (let [{:keys [out status value]} (combine-responses (repl-eval session "(missing paren"))]       ;;; ) -- so editor not confused
     (is (nil? value))
     (is (= #{"done" "eval-error"} status))
@@ -444,6 +444,6 @@
 
 (def-repl-test agent-await
   (is (= [42] (repl-values session (code (let [a (agent nil)]
-                                           (send a (fn [_] (Thread/Sleep 1000) 42))                 ;DM: Thread/sleep
+                                           (send a (fn [_] (System.Threading.Thread/Sleep 1000) 42))                 ;DM: Thread/sleep
                                            (await a)
                                            @a))))))
