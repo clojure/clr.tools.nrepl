@@ -56,8 +56,9 @@ be loaded."} file-contents (atom {}))
    file loads will fail due to the JVM method size limitation.
    In such cases, see `load-large-file-code'`."
   [file file-path file-name]
+  (Console/WriteLine "LOADFILE: {0} {1} {2}" file file-path file-name)
   (apply format
-    "(clojure.lang.Compiler/load (System.IO.StringReader. %s) %s %s)"                          ;DM: java.io.StringReader.
+    "(clojure.lang.Compiler/load (System.IO.StringReader. %s) nil %s %s)"                          ;DM: java.io.StringReader.  Add nil (load needs four args)
     (map (fn [item]
            (binding [*print-length* nil
                      *print-level* nil]
