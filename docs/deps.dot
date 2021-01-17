@@ -1,0 +1,55 @@
+strict digraph G {
+
+rankdir = RL;
+
+/* here start the interfaces */
+
+node [shape=box];
+
+
+	bencode;
+	config;
+	misc;
+		version;
+			middleware -> { misc, transport, version};
+
+	transport -> {bencode, misc, version};
+
+		
+
+	
+	
+
+	helpers -> { "mw.load-file" }
+	server -> {ack, middleware, "mw.dynamic-loader", "mw.completion", 
+				"mw.interruptible-eval", "mw.load-file", 
+				"mw.lookup", "mw.session", "mw.sideloader", misc, transport};
+
+
+
+	"util.completion" -> {misc};
+	"util.lookup" -> {misc};
+	"util.print";
+
+	
+
+	"mw.caught" -> {middleware, "mw.print", misc, transport};
+	"mw.completion" -> {"util.completion", middleware, misc, transport};
+	"mw.dynamic-loader" -> {middleware, "mw.session", misc, transport};
+	"mw.interruptible-eval" -> {middleware, "mw.caught", "mw.print", misc, transport};
+	"mw.load-file" -> {middleware, "mw.caught", "mw.interruptible-eval", "ms.print", transport};
+	"mw.lookup" -> {middleware, misc, "util.lookup", transport};
+	"mw.print" -> {middleware, misc, transport};
+	"mw.session" -> {middleware "mw.interruptible-eval", misc, transport};
+	"mw.sideloader" -> {middleware, misc, transport};
+	
+
+	ack -> {core, transport };
+
+	cmdline -> {config, core, ack, server, transport, version};
+
+	core -> { misc, transport, version };
+
+	
+	}
+
