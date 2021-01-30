@@ -7,6 +7,7 @@
   (:require
    [cnrepl.middleware :refer [set-descriptor!]]
    [cnrepl.misc :as misc]
+   [cnrepl.debug :as debug]                                                ;;; DM:Added	
    [cnrepl.transport :as transport])
   (:import
    (System.IO TextWriter StringWriter StreamWriter BufferedStream)         ;;; (java.io BufferedWriter PrintWriter StringWriter Writer)
@@ -16,6 +17,7 @@
 ;; private in clojure.core
 (defn- pr-on
   [x w]
+  (debug/prn-thread "pr-on says:" x w   "****")
   (if *print-dup*
     (print-dup x w)
     (print-method x w))
@@ -80,13 +82,15 @@
         (ToString []                                                                ;;; toString
           (.ToString writer))                                                       ;;; .toString
         (Write                                                                      ;;; write
-          ([x]
+          ([x] 
            (let [cbuf (to-char-array x)]
+		    (debug/prn-thread "wgw-x" this "///"  x  "///" cbuf "****")
              (.Write ^TextWriter this cbuf (int 0) (count cbuf))))                  ;;; .write ^Writer
           ([x off len]
            (locking total
              (let [cbuf (to-char-array x)
                    rem (- quota @total)]
+			   (debug/prn-thread "wgw-xol" this "///"  x  off len "///" cbuf "****")
                (vswap! total + len)
                (.Write writer cbuf ^int off ^int (min len rem))                     ;;; .write
                (when (neg? (- rem len))
@@ -102,22 +106,34 @@
   transport of `msg`, keyed by `key`."
   ^System.IO.TextWriter                                                               ;;; ^java.io.PrintWriter
   [key {:keys [transport] :as msg} {:keys [::buffer-size ::quota] :as opts}]
-  (-> (proxy [TextWriter] []                                                          ;;; Writer
-        (Write                                                                        ;;; write
-          ([x]
-           (let [cbuf (to-char-array x)]
-             (.Write ^TextWriter this cbuf (int 0) (count cbuf))))                    ;;; .write ^Writer 
-          ([x off len]
-           (let [cbuf (to-char-array x)
-                 text (str (doto (StringWriter.)
-                             (.Write cbuf ^int off ^int len)))]                       ;;; .write
-             (when (pos? (count text))
-               (transport/send transport (misc/response-for msg key text))))))
-        (Flush [])                                                                    ;;; flush
-        (Close []))                                                                   ;;; close
-      (BufferedStream. (or buffer-size 1024))                                         ;;; BufferedWriter.
-      (with-quota-writer quota)
-      (StreamWriter. true)))                                                          ;;; PrintWriter.
+  (-> (proxy [TextWriter] []
+        (Write 
+		  ([x]
+		     (let [text (str (doto (StringWriter.) 
+			                    (.Write x)))]
+				(when (pos? (count text))
+				  (transport/send transport (misc/response-for msg key text)))))))
+      (with-quota-writer nil)))
+	  
+  
+;;;  (-> (proxy [TextWriter] []                                                          ;;; Writer
+;;;        (Write                                                                        ;;; write
+;;;          ([x] 
+;           (let [cbuf (to-char-array x)]
+;		     (debug/prn-thread "rpw-x" this "///" x "///" cbuf "***")
+;             (.Write ^TextWriter this cbuf (int 0) (count cbuf))))                    ;;; .write ^Writer 
+;          ([x off len]  (debug/prn-thread "rpw-xol" x off len)
+;           (let [cbuf (to-char-array x)
+;		         _ (debug/prn-thread "rpw-xol2" this "///" x "///" cbuf "***")
+;                 text (str (doto (StringWriter.)
+;                             (.Write cbuf ^int off ^int len)))]                       ;;; .write
+;             (when (pos? (count text))
+;               (transport/send transport (misc/response-for msg key text))))))
+;        (Flush [])                                                                    ;;; flush
+;        (Close []))                                                                   ;;; close
+;      #_(BufferedStream. (or buffer-size 1024))                                         ;;; #_BufferedWriter.
+;      (with-quota-writer quota)
+;      #_(StreamWriter. true)))                                                          ;;; PrintWriter.
 
 (defn- send-streamed
   [{:keys [transport] :as msg}
@@ -125,8 +141,10 @@
    {:keys [::print-fn ::keys] :as opts}]
   (let [print-key (fn [key]
                     (let [value (get resp key)]
-                      (try
-                        (with-open [writer (replying-PrintWriter key msg opts)]
+                      (try 
+                        (with-open [writer (replying-PrintWriter key msg opts)]   
+						(debug/prn-thread "S-S1: " value print-fn writer)
+						(debug/prn-thread "S-S2: " value)
                           (print-fn value writer))
                         (catch ArgumentOutOfRangeException _                          ;;; QuotaExceeded
                           (transport/send
@@ -144,7 +162,8 @@
                           writer (-> (StringWriter.)
                                      (with-quota-writer quota))
                           truncated? (volatile! false)]
-                      (try
+                      (try  
+						(debug/prn-thread "S-NS1: " value print-fn writer)
                         (print-fn value writer)
                         (catch ArgumentOutOfRangeException _                            ;;; QuotaExceeded
                           (vreset! truncated? true)))
@@ -170,8 +189,8 @@
                                              (select-keys configuration-keys))
             resp (apply dissoc resp configuration-keys)]
         (if stream?
-          (send-streamed msg resp opts)
-          (send-nonstreamed msg resp opts)))
+          (do (debug/prn-thread "send-streamed" msg resp opts) (send-streamed msg resp opts))
+          (do (debug/prn-thread "send-nonstreamed" msg resp opts) (send-nonstreamed msg resp opts))))
       this)))
 
 (defn- resolve-print
@@ -219,7 +238,7 @@
   [handler]
   (fn [{:keys [::options] :as msg}]
     (let [print-var (resolve-print msg)
-          print (fn [value writer]
+          print (fn [value writer]  (debug/prn-thread "wp " print-var value writer)
                   (if print-var
                     (print-var value writer options)
                     (pr-on value writer)))
