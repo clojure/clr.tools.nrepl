@@ -1,0 +1,101 @@
+strict digraph G {
+
+rankdir = RL;
+
+/* here start the interfaces */
+
+subgraph clustermain {
+
+	node [shape=box];
+
+	bencode;
+	ack;
+	cmdline;
+	core;
+	server;
+	transport;
+	misc;
+	"mw.caught";
+	"mw.print";
+	"mw.session";
+	"mw.sideloader";
+	"mw.interruptible_eval";
+	middleware;
+	version;
+	helpers;
+	"util.completion";
+	"util.lookup";
+	"mw.dynamic_loader";
+	}
+	
+subgraph clustermiddleware {
+	node [shape=box];
+	"mw.caught";
+	"mw.print";
+	"mw.session";
+	"mw.sideloader";
+	"mw.interruptible_eval";
+	"mw.dynamic_loader";
+}
+
+subgraph clusterutil {
+	node [shape=box];
+	"util.completion";
+	"util.lookup";
+}
+		
+subgraph clustercoretest {
+	node [shape=ellipse];
+	core_test -> {core, ack, "mw.caught", "mw.print", "mw.session", "mw.sideloader", misc, server, transport};
+	
+	}
+
+subgraph clustercoretestdep {
+	node [shape=ellipse];
+	cmdline_test -> {ack, cmdline, core, core_test, server, transport};
+
+	describe_test -> {core, core_test, middleware, server, version};
+	helpers_test -> {core, core_test, helpers};
+
+}
+
+subgraph clustermaintest{
+
+	node [shape=ellipse];
+	bencode_test -> {bencode};
+	edn_test -> {core, server, transport};
+	middleware_test -> {middleware, server};
+	misc_test -> {misc};
+	response_test -> {core, transport};
+	transport_test -> {transport};
+
+}
+
+	
+
+	
+subgraph clusterutiltest {
+
+	node [shape=ellipse];
+
+
+	"util.completion_test" -> {"util.completion"};
+	"util.lookup_test" -> {bencode, "util.lookup"};
+	
+	}
+	
+	subgraph clustermwtest {
+
+	node [shape=ellipse];
+
+
+	sanity_test -> {core, "mw.interruptible_eval", "mw.print", "mw.session", misc, transport};
+	"mw.completion_test" -> {core, core_test};
+	"mw.dynamic_loader_test" -> {core, "mw.dynamic_loader", transport};
+	"mw.load_file_test" -> {core, core_test};
+	"mw.lookup_test" -> {core, core_test};
+	"mw.print_test" -> {core, "mw.print", transport};
+		
+	
+	}
+}
