@@ -64,7 +64,7 @@
         (resolve sym)
         (catch Exception _))))
 
-#_(defmacro with-session-classloader                                        ;;; for now, definitely a no-op
+(defmacro with-session-classloader                                        ;;; for now, definitely a no-op
   "This macro does two things:
   
    1. If the session has a classloader set, then execute the body using that.
@@ -74,16 +74,16 @@
       might also be the sideloader. This is required to get hotloading with
       pomegranate working under certain conditions."
   [session & body]
-  `(let [ctxcl#  (.getContextClassLoader (Thread/currentThread))
-         alt-cl# (when-let [classloader# (:classloader (meta ~session))]
-                   (classloader#))
-         cl#     (or alt-cl# ctxcl#)]
-     (.setContextClassLoader (Thread/currentThread) cl#)
+  `(let [                                                                     ;;; ctxcl#  (.getContextClassLoader (Thread/currentThread))
+                                                                              ;;; alt-cl# (when-let [classloader# (:classloader (meta ~session))]
+                                                                              ;;;               (classloader#))
+         ]                                                                    ;;; cl#     (or alt-cl# ctxcl#)
+                                                                              ;;; (.setContextClassLoader (Thread/currentThread) cl#)
      (try
-       (with-bindings {clojure.lang.Compiler/LOADER cl#}
+       (with-bindings {}                                                      ;;; clojure.lang.Compiler/LOADER cl#
          ~@body)
        (finally
-         (.setContextClassLoader (Thread/currentThread) ctxcl#)))))
+         ))))                                                                  ;;; (.setContextClassLoader (Thread/currentThread) ctxcl#)
 
 (defn java-8?                                                               ;;; definitely a no-oop.
   "Util to check if we are using Java 8. Useful for features that behave
