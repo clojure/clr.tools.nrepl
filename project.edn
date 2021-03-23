@@ -1,0 +1,3 @@
+{:name "nrepl port to clr compatible with magic"
+ :description "Port of https://github.com/nrepl/nrepl to CLR compatible with Magic"
+ :source-paths ["src/clojure" "test/clojure"]}
