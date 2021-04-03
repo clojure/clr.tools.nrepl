@@ -1,4 +1,4 @@
-(ns nrepl.middleware.completion
+(ns cnrepl.middleware.completion
   "Code completion middleware.
 
   The middleware is a simple wrapper around the
