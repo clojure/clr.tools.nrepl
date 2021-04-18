@@ -175,7 +175,7 @@
         ;; a dependency on the order of ipv4 and ipv6 records for
         ;; localhost in /etc/hosts
         bind (or bind "127.0.0.1")
-		ipe (IPEndPoint. (IPAddress. bind) port)                                                       ;;; DM:ADDED
+		ipe (IPEndPoint. (IPAddress/Parse bind) port)                                                       ;;; DM:ADDED
         ss (doto                                                                                 ;;; (ServerSocket.)
 		     (Socket. (.AddressFamily ipe)  SocketType/Stream  ProtocolType/Tcp)                 ;;;  DM:Added
              (.SetSocketOption SocketOptionLevel/Socket SocketOptionName/ReuseAddress true)      ;;; (.setReuseAddress true)
