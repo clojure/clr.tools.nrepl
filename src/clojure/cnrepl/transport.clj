@@ -82,11 +82,11 @@
   `(try
      ~@body
      #_(catch RuntimeException e#                                              ;;; I'm not sure what is covered here
-       (if (= "EOF while reading" (.getMessage e#))
+       (if (= "EOF while reading" (.Message e#))                            ;;; .getMessage
          (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server"))
          (throw e#)))
      (catch EndOfStreamException e#                                             ;;; EOFException
-       (if (= "Invalid netstring. Unexpected end of input." (.getMessage e#))
+       (if (= "Invalid netstring. Unexpected end of input." (.Message e#))      ;;; .getMessage 
          (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server"))
          (throw e#)))
      (catch Exception e#                                                        ;;; Throwable
