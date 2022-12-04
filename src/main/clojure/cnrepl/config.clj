@@ -24,7 +24,7 @@
   with the NREPL_CONFIG_DIR env variable."
   (or (Environment/GetEnvironmentVariable "NREPL_CONFIG_DIR")         ;;; (System/getenv "NREPL_CONFIG_DIR")
       (Environment/GetEnvironmentVariable "nrepl.config.dir")
-      (str home-dir System.IO.Path/PathSeparator ".nrepl")))         ;;; java.io.File/separator
+      (str home-dir System.IO.Path/DirectorySeparatorChar ".nrepl")))         ;;; java.io.File/separator
 
 (def config-file
   "nREPL's config file."
