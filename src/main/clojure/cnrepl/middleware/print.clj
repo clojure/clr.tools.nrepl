@@ -6,18 +6,17 @@
   (:refer-clojure :exclude [print])
   (:require
    [cnrepl.middleware :refer [set-descriptor!]]
-   [cnrepl.misc :as misc]
-   [cnrepl.debug :as debug]                                                ;;; DM:Added	
+   [cnrepl.misc :as misc]  [cnrepl.debug :as debug]                                                ;;; DM:Added	
    [cnrepl.transport :as transport])
   (:import
    (System.IO TextWriter StringWriter StreamWriter BufferedStream)         ;;; (java.io BufferedWriter PrintWriter StringWriter Writer)
-   #_(cnrepl QuotaExceeded)  ;;; Seriously, I'm not going to introduce a C# class. gen-class could do it, but I can't AOT-compile at the moment.  Let's just some other exception for now.  In my case, ArgumentOutOfRangeException.
+   #_(cnrepl QuotaExceeded)  ;;; Seriously, I'm not going to introduce a C# class. gen-class could do it, but I can't AOT-compile at the moment.  Let's just some other exception for now.  In my case, InvalidOperationException.
    (cnrepl.transport Transport)))
 
 ;; private in clojure.core
 (defn- pr-on
   [x w]
-  (debug/prn-thread "pr-on says:" x w   "****")
+  ;(prn "pr-on says:" x " " w "class w = " (class x)  "****")
   (if *print-dup*
     (print-dup x w)
     (print-method x w))
@@ -84,57 +83,79 @@
         (Write                                                                      ;;; write
           ([x] 
            (let [cbuf (to-char-array x)]
-		    (debug/prn-thread "wgw-x" this "///"  x  "///" cbuf "****")
+		    ;(prn "wqw-x" this "///"  x  "///" cbuf "****")
              (.Write ^TextWriter this cbuf (int 0) (count cbuf))))                  ;;; .write ^Writer
           ([x off len]
            (locking total
              (let [cbuf (to-char-array x)
                    rem (- quota @total)]
-			   (debug/prn-thread "wgw-xol" this "///"  x  off len "///" cbuf "****")
+			   ;(prn "wqw-xol" this "///"  x  off len "///" cbuf "****")
                (vswap! total + len)
                (.Write writer cbuf ^int off ^int (min len rem))                     ;;; .write
                (when (neg? (- rem len))
-                 (throw (ArgumentOutOfRangeException.)))))))                        ;;; QuotaExceeded.
+                 (throw (InvalidOperationException. "quota writer quota exceeded")))))))                        ;;; QuotaExceeded.
         (Flush []                                                                   ;;; flush
           (.Flush writer))                                                          ;;; .flush
         (Close []                                                                   ;;; close
           (.Close writer))))))                                                      ;;; .close
 
-(defn replying-PrintWriter
-  "Returns a `java.io.PrintWriter` suitable for binding as `*out*` or `*err*`. All
-  of the content written to that `PrintWriter` will be sent as messages on the
-  transport of `msg`, keyed by `key`."
-  ^System.IO.TextWriter                                                               ;;; ^java.io.PrintWriter
-  [key {:keys [transport] :as msg} {:keys [::buffer-size ::quota] :as opts}]
-  (-> (proxy [TextWriter] []
-        (Write 
-		  ([x]
-		     (let [text (str (doto (StringWriter.) 
-			                    (.Write x)))]
-				(when (pos? (count text))
-				  (transport/send transport (misc/response-for msg key text)))))))
-      (with-quota-writer nil)))
-	  
-  
-;;;  (-> (proxy [TextWriter] []                                                          ;;; Writer
-;;;        (Write                                                                        ;;; write
-;;;          ([x] 
-;           (let [cbuf (to-char-array x)]
-;		     (debug/prn-thread "rpw-x" this "///" x "///" cbuf "***")
+;(defn replying-PrintWriter
+;  "Returns a `java.io.PrintWriter` suitable for binding as `*out*` or `*err*`. All
+;  of the content written to that `PrintWriter` will be sent as messages on the
+;  transport of `msg`, keyed by `key`."
+;  ^System.IO.TextWriter                                                               ;;; ^java.io.PrintWriter
+;  [key {:keys [transport] :as msg} {:keys [::buffer-size ::quota] :as opts}]
+;  (-> (proxy [TextWriter] []
+;        (Write 
+;		  ([x]
+;		   (let [cbuf (to-char-array x)]
+;		     #_(debug/prn-thread "rpw-x" this "///" x "///" cbuf "***")
 ;             (.Write ^TextWriter this cbuf (int 0) (count cbuf))))                    ;;; .write ^Writer 
-;          ([x off len]  (debug/prn-thread "rpw-xol" x off len)
+;          ([x off len]  #_(debug/prn-thread "rpw-xol" x off len)
 ;           (let [cbuf (to-char-array x)
-;		         _ (debug/prn-thread "rpw-xol2" this "///" x "///" cbuf "***")
+;;		         _ (debug/prn-thread "rpw-xol2" this "///" x "///" cbuf "***")
 ;                 text (str (doto (StringWriter.)
 ;                             (.Write cbuf ^int off ^int len)))]                       ;;; .write
 ;             (when (pos? (count text))
 ;               (transport/send transport (misc/response-for msg key text))))))
 ;        (Flush [])                                                                    ;;; flush
 ;        (Close []))                                                                   ;;; close
-;      #_(BufferedStream. (or buffer-size 1024))                                         ;;; #_BufferedWriter.
+;      (BufferedStream. (or buffer-size 1024))                                         ;;; #_BufferedWriter.
 ;      (with-quota-writer quota)
-;      #_(StreamWriter. true)))                                                          ;;; PrintWriter.
+;      (StreamWriter. )))                                                          ;;; PrintWriter. true    TODO:  Set this to autoflush
 
+(defn replying-PrintWriter
+  "Returns a `java.io.PrintWriter` suitable for binding as `*out*` or `*err*`. All
+  of the content written to that `PrintWriter` will be sent as messages on the
+  transport of `msg`, keyed by `key`."
+  ^System.IO.TextWriter     
+  [key {:keys [transport] :as msg} {:keys [::buffer-size ::quota]}]
+  (let [^int buffer-size (int (or buffer-size 1024))
+        sb (StringBuilder.)
+		send-fn (fn [text] (transport/send transport (misc/response-for msg key text)))
+		send-chunks
+		  (fn []
+            (let [text (.ToString sb)]		  
+		      (when-not (String/IsNullOrEmpty text)
+		        (loop [i 0]
+		          (if (and (< i (.Length text)) (>= (- (.Length text) i ) buffer-size))
+				    (do (send-fn (.Substring text i buffer-size))
+			  	        (recur (+ i buffer-size)))
+					(.Remove sb 0 i))))))
+		send-rest 
+		  (fn []   
+		    (when (pos? (.Length sb))
+			  (send-fn (.ToString sb))
+			  (.Clear sb)))
+		send-all
+		  (fn [] (send-chunks)(send-rest))]
+    (-> (proxy [TextWriter] []
+          (Write
+            ([x] (.Append sb (str x)) (send-chunks)))
+          (Flush [] (send-all))
+	      (Close [] (.Flush this)))
+        (with-quota-writer quota)))) 		   
+ 
 (defn- send-streamed
   [{:keys [transport] :as msg}
    resp
@@ -143,10 +164,8 @@
                     (let [value (get resp key)]
                       (try 
                         (with-open [writer (replying-PrintWriter key msg opts)]   
-						(debug/prn-thread "S-S1: " value print-fn writer)
-						(debug/prn-thread "S-S2: " value)
-                          (print-fn value writer))
-                        (catch ArgumentOutOfRangeException _                          ;;; QuotaExceeded
+                          (print-fn value writer) (.Flush writer))                  ;;; Flush added because we do not have AutoFlush here.
+                        (catch InvalidOperationException _                          ;;; QuotaExceeded
                           (transport/send
                            transport
                            (misc/response-for msg :status ::truncated))))))]
@@ -163,9 +182,8 @@
                                      (with-quota-writer quota))
                           truncated? (volatile! false)]
                       (try  
-						(debug/prn-thread "S-NS1: " value print-fn writer)
-                        (print-fn value writer)
-                        (catch ArgumentOutOfRangeException _                            ;;; QuotaExceeded
+                        (print-fn value writer) (.Flush writer)                       ;;; Flush added because we do not have AutoFlush here.
+                        (catch InvalidOperationException _                            ;;; QuotaExceeded
                           (vreset! truncated? true)))
                       [key (str writer) @truncated?]))
         rf (completing
@@ -189,8 +207,8 @@
                                              (select-keys configuration-keys))
             resp (apply dissoc resp configuration-keys)]
         (if stream?
-          (do (debug/prn-thread "send-streamed" msg resp opts) (send-streamed msg resp opts))
-          (do (debug/prn-thread "send-nonstreamed" msg resp opts) (send-nonstreamed msg resp opts))))
+          (send-streamed msg resp opts)
+          (send-nonstreamed msg resp opts)))
       this)))
 
 (defn- resolve-print
@@ -238,7 +256,7 @@
   [handler]
   (fn [{:keys [::options] :as msg}]
     (let [print-var (resolve-print msg)
-          print (fn [value writer]  (debug/prn-thread "wp " print-var value writer)
+          print (fn [value writer]
                   (if print-var
                     (print-var value writer options)
                     (pr-on value writer)))

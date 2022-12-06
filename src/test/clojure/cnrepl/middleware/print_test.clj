@@ -143,13 +143,13 @@
 
 (deftest print-quota
   (testing-print "quota option respected"
-    (is (= [{:value                 "(0 1 2 3"
+    (is (= [{:value                 "(0 1 2 3"             ;;; ) adding extra paren so my editor doesn't mislead me.
              :status                #{::print/truncated}
              ::print/truncated-keys [:value]}]
            (handle {:value        (range 512)
                     ::print/quota 8}))))
   (testing-print "works with streamed printing"
-    (is (= [{:value "(0 1 2 3"}
+    (is (= [{:value "(0 1 2 3"}                                ;;; )>  adding extra paren so my editor doesn't mislead me.
             {:status #{::print/truncated}}
             {}]
            (handle {:value          (range 512)
@@ -157,14 +157,14 @@
                     ::print/quota   8}))))
 
   (testing-print "works with custom printer"
-    (is (= [{:value                 "<foo (0 "
+    (is (= [{:value                 "<foo (0 "               ;;; )>  adding extra paren so my editor doesn't mislead me.
              :status                #{::print/truncated}
              ::print/truncated-keys [:value]}]
            (handle {:value        (range 512)
                     ::print/print `custom-printer
                     ::print/quota 8}))))
   (testing-print "works with custom printer and streamed printing"
-    (is (= [{:value "<foo (0 "}
+    (is (= [{:value "<foo (0 "}                                   ;;; )>  adding extra paren so my editor doesn't mislead me.
             {:status #{::print/truncated}}
             {}]
            (handle {:value          (range 512)
