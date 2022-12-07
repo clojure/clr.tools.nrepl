@@ -67,9 +67,9 @@
   (cond
     (string? x) (.ToCharArray ^String x)                  ;;; .toCharArray
     (integer? x) (char-array [(char x)])
-    :else x))
+    :else x))                                            ;;; just x -- How does this work when x is not a Char[]?  
 
-(defn with-quota-writer
+#_(defn with-quota-writer
   "Returns a `java.io.Writer` that wraps `writer` and throws `QuotaExceeded` once
   it has written more than `quota` bytes."
   ^System.IO.TextWriter                                                             ;;; ^java.io.Writer
@@ -82,22 +82,51 @@
           (.ToString writer))                                                       ;;; .toString
         (Write                                                                      ;;; write
           ([x] 
-           (let [cbuf (to-char-array x)]
-		    ;(prn "wqw-x" this "///"  x  "///" cbuf "****")
+           (let [cbuf (to-char-array x)]                                            ;;;  [cbuf (to-char-array x)]   -- we're getting in mostly strings anyway, and we have String/int/int overload on Write
+		     (prn (str "wqw-x" (class x) " " x  " "  " => " cbuf ))
              (.Write ^TextWriter this cbuf (int 0) (count cbuf))))                  ;;; .write ^Writer
           ([x off len]
            (locking total
-             (let [cbuf (to-char-array x)
+             (let [cbuf (to-char-array x)                                                     ;;;  (to-char-array x)  -- mostly we will be getting strings, so (str x) doesn't allocate
                    rem (- quota @total)]
-			   ;(prn "wqw-xol" this "///"  x  off len "///" cbuf "****")
+			   (prn (str "wqw-xol" (class x) " " x " " off " " len " => " (class cbuf) " " cbuf))
                (vswap! total + len)
-               (.Write writer cbuf ^int off ^int (min len rem))                     ;;; .write
+               (.Write writer (.Substring cbuf ^int off ^int (min len rem)))        			   ;;; .write
+			   ;(prn "wqw-xol -- made it")
                (when (neg? (- rem len))
                  (throw (InvalidOperationException. "quota writer quota exceeded")))))))                        ;;; QuotaExceeded.
         (Flush []                                                                   ;;; flush
           (.Flush writer))                                                          ;;; .flush
         (Close []                                                                   ;;; close
           (.Close writer))))))                                                      ;;; .close
+
+(defn with-quota-writer
+  "Returns a `java.io.Writer` that wraps `writer` and throws `QuotaExceeded` once
+  it has written more than `quota` bytes."
+  ^TextWriter                                                                      ;;; ^java.io.Writer
+  [^TextWriter writer quota]                                                       ;;; ^Writer
+  (if-not quota
+    writer
+    (let [total (volatile! 0)]
+      (proxy [TextWriter] []                                                       ;;; Writer
+        (ToString []                                                               ;;; toString
+          (.ToString writer))                                                      ;;; .toString
+        (Write                                                                     ;;; write
+          ([x]
+           (let [cbuf (to-char-array x)]
+             (.Write ^TextWriter this cbuf (int 0) (count cbuf))))                 ;;; .write ^Writer 
+          ([x off len]
+           (locking total
+             (let [cbuf (to-char-array x)
+                   rem (- quota @total)]
+               (vswap! total + len)                                                ;;; .write
+               (.Write writer cbuf ^int off ^int (min len rem))
+               (when (neg? (- rem len))
+                 (throw (InvalidOperationException. "quota exceeded")))))))         ;;; QuotaExceeded.
+        (Flush [] (prn "Flush wqw")                                                                 ;;; flush
+          (.Flush writer))                                                         ;;; .flush
+        (Close []                                                                  ;;; close
+          (.Close writer))))))                                                     ;;; .close
 
 ;(defn replying-PrintWriter
 ;  "Returns a `java.io.PrintWriter` suitable for binding as `*out*` or `*err*`. All
@@ -140,31 +169,42 @@
 		        (loop [i 0]
 		          (if (and (< i (.Length text)) (>= (- (.Length text) i ) buffer-size))
 				    (do (send-fn (.Substring text i buffer-size))
+					    (prn "Sending chunk:" (.Substring text i buffer-size)) 
 			  	        (recur (+ i buffer-size)))
 					(.Remove sb 0 i))))))
 		send-rest 
 		  (fn []   
 		    (when (pos? (.Length sb))
+			  (prn "Sending tail: " (.ToString sb))
 			  (send-fn (.ToString sb))
 			  (.Clear sb)))
 		send-all
 		  (fn [] (send-chunks)(send-rest))]
     (-> (proxy [TextWriter] []
           (Write
-            ([x] (.Append sb (str x)) (send-chunks)))
-          (Flush [] (send-all))
+            ([x] 
+			  ;(prn "receiving class " (class x) ", string = " (to-char-array x))
+              (let [cbuf (to-char-array x)]			  
+			    (.Append sb cbuf 0 (count cbuf)))
+			  (send-chunks))
+			([x len pos] 
+			  ;(prn "receiving2 " x " " (class x) " " len " " pos )
+			  (if (instance? |System.Char[]| x)
+			    (do (.Append sb ^chars x (int len) (int pos)) (send-chunks))
+				(proxy-super x len pos))))
+          (Flush [] (prn "Flush rPW") (send-all))
 	      (Close [] (.Flush this)))
         (with-quota-writer quota)))) 		   
- 
+
 (defn- send-streamed
   [{:keys [transport] :as msg}
    resp
    {:keys [::print-fn ::keys] :as opts}]
   (let [print-key (fn [key]
                     (let [value (get resp key)]
-                      (try 
-                        (with-open [writer (replying-PrintWriter key msg opts)]   
-                          (print-fn value writer) (.Flush writer))                  ;;; Flush added because we do not have AutoFlush here.
+                      (try
+                        (with-open [writer (replying-PrintWriter key msg opts)]
+                          (try (print-fn value writer) (finally (.Flush writer))))                  ;;; Flush added because we do not have AutoFlush here.
                         (catch InvalidOperationException _                          ;;; QuotaExceeded
                           (transport/send
                            transport
@@ -182,7 +222,7 @@
                                      (with-quota-writer quota))
                           truncated? (volatile! false)]
                       (try  
-                        (print-fn value writer) (.Flush writer)                       ;;; Flush added because we do not have AutoFlush here.
+                        (try (print-fn value writer) (finally (.Flush writer)))                       ;;; Flush added because we do not have AutoFlush here.
                         (catch InvalidOperationException _                            ;;; QuotaExceeded
                           (vreset! truncated? true)))
                       [key (str writer) @truncated?]))

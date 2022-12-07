@@ -217,14 +217,14 @@
              (handle {:value              (range 10)
                       ::print/buffer-size 16})))))
   (testing-print "setting *quota* works"
-    (is (= [{:value                 "<bar (0 "
+    (is (= [{:value                 "<bar (0 "                             ;;; )
              :status                #{:nrepl.middleware.print/truncated}
              ::print/truncated-keys [:value]}]
            (binding [print/*print-fn* custom-printer-2
                      print/*quota*    8]
              (handle {:value (range 512)})))))
   (testing-print "request can still override *quota*"
-    (is (= [{:value                 "<bar (0 1 2 3 4 "
+    (is (= [{:value                 "<bar (0 1 2 3 4 "                      ;;; )
              :status                #{:nrepl.middleware.print/truncated}
              ::print/truncated-keys [:value]}]
            (binding [print/*print-fn* custom-printer-2
