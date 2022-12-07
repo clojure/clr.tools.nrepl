@@ -119,7 +119,7 @@
            :print (fn [value]
                     ;; *out* has :tag metadata; *err* does not
                     (.Flush ^TextWriter *err*)                                                 ;;; .flush ^Writer
-                    (.Flush ^TextWriter *out*)                                                 ;;; .flush  -- added type hint
+                    (.Flush ^TextWriter *out*)                                                 ;;; .flush  -- added type hint  TODO -- not clear this is always true, based on a comment I made elsewhere
                     (t/send transport (response-for msg {:ns (str (ns-name *ns*))
                                                          :value value
                                                          ::print/keys #{:value}})))
