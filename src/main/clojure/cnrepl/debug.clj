@@ -5,7 +5,7 @@
 (defn- write-out [out & args]
   (binding [*out* out]
     (pr "Thd " (-> System.Threading.Thread/CurrentThread (.ManagedThreadId)) ": ")
-    (apply prn args)
+    (prn (apply str args))
 	out))
 
 (defn prn-thread [& args]

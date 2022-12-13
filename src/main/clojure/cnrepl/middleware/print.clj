@@ -6,7 +6,7 @@
   (:refer-clojure :exclude [print])
   (:require
    [cnrepl.middleware :refer [set-descriptor!]]
-   [cnrepl.misc :as misc] 
+   [cnrepl.misc :as misc] [cnrepl.debug :as debug]
    [cnrepl.transport :as transport])
   (:import
    (System.IO TextWriter StringWriter StreamWriter BufferedStream)         ;;; (java.io BufferedWriter PrintWriter StringWriter Writer)
@@ -80,7 +80,7 @@
         (ToString []                                                               ;;; toString
           (.ToString writer))                                                      ;;; .toString
         (Write                                                                     ;;; write
-          ([x]
+          ([x]  (debug/prn-thread "wqw: writing " (class x))
            (let [cbuf (to-char-array x)]
              (.Write ^TextWriter this cbuf (int 0) (count cbuf))))                 ;;; .write ^Writer 
           ([x off len]
@@ -146,7 +146,7 @@
 		  (fn [] (send-chunks)(send-rest))]
     (-> (proxy [TextWriter] []
           (Write
-            ([x] 
+            ([x] (debug/prn-thread "rpw: writing " (class x))
               (let [cbuf (to-char-array x)]			  
 			    (.Append sb cbuf 0 (count cbuf)))
 			  (send-chunks))

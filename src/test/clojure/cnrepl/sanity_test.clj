@@ -77,7 +77,7 @@
     {:ns "user" :value [nil]}
     '*1))
 
-#_(deftest repl-out-writer                                                 --- can't do this test without implementing more methods for 
+#_(deftest repl-out-writer                                                 --- can't do this test without implementing more methods for   replying-PrintWriter   TODO?
   (let [[local remote] (piped-transports)
         w (print/replying-PrintWriter :out {:transport remote} {})]
     (doto w

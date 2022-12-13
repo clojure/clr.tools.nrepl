@@ -3,7 +3,7 @@
   {:author "Chas Emerick"}
   (:require
    clojure.main
-   [cnrepl.middleware :refer [set-descriptor!]]
+   [cnrepl.middleware :refer [set-descriptor!]]  [cnrepl.debug :as debug]
    [cnrepl.middleware.interruptible-eval :refer [*msg* evaluate]]
    [cnrepl.misc :refer [uuid response-for]]
    [cnrepl.transport :as t])
@@ -110,20 +110,20 @@
   [session-id transport]
   (let [input-queue (|System.Collections.Concurrent.BlockingCollection`1[System.Object]|.)    ;;; LinkedBlockingQueue.
         request-input (fn []
-		                #_(debug/prn-thread "Request input")
+		                (debug/prn-thread "session-in: Request input")
                         (cond (> (.Count input-queue) 0)                                      ;;; .size
                                 (.Take input-queue)                                           ;;; .take
                               *skipping-eol*
                               nil
                               :else
                               (do
-								#_(debug/prn-thread "Sending message")							  
+								(debug/prn-thread "session-in: Sending message")							  
                                 (t/send transport
                                         (response-for *msg* :session session-id
                                                       :status :need-input))
                                 (.Take input-queue))))                                        ;;; .take
 		do-read (fn [buf off len]
-		          #_(debug/prn-thread "do-read")		
+		          (debug/prn-thread "session-in: do-read")		
                   (locking input-queue
                     (loop [i off]
                       (cond
@@ -140,14 +140,14 @@
 				   (Peek [] -1)                                                               ;;; ADDED  -- we'll just say we don't support it 
                    (Read                                                                      ;;; read
                     ([]
-                     (let [^System.IO.TextReader this this] (proxy-super Read)))              ;;; ^Reader  read
+                     (let [^System.IO.TextReader this this](debug/prn-thread "Read[0]") (proxy-super Read)))              ;;; ^Reader  read
                     ([x]                                                                      ;;; ^Reader
                      (let [^System.IO.TextReader this this]
                                                                                               ;;; if (instance? java.nio.CharBuffer x)
-                                                                                              ;;;   (proxy-super read ^java.nio.CharBuffer x)
+                         (debug/prn-thread "Read[1]")                                                                     ;;;   (proxy-super read ^java.nio.CharBuffer x)
                          (proxy-super Read x)))                                              ;;;     ... 
                     ([^chars buf off len]
-					 #_(debug/prn-thread "Read[3]")
+					 (debug/prn-thread "Read[3]")
 					 (if (zero? len)
                        -1
                        (let [first-character (request-input)]
@@ -198,7 +198,7 @@
   If required, a future feature could make both timeouts configurable, either
   as a server config or parameters provided by the `interrupt` message."
   [^Thread t]
-  (.Interrupt t)                                        ;;; .interrupt
+  (.Interrupt t)                                        ;;; .interrupt  -- TODO: Should this be .Abort?????
   (Thread/Sleep 100)                                    ;;; sleep
   (future
     (Thread/Sleep 5000)                                 ;;; sleep

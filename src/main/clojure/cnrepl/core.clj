@@ -3,7 +3,7 @@
   {:author "Chas Emerick"}
   (:require
    clojure.set
-   [cnrepl.misc :refer [uuid]]
+   [cnrepl.misc :refer [uuid]] [cnrepl.debug :as debug]
    [cnrepl.transport :as transport]
    [cnrepl.version :as version])
   (:import
@@ -65,13 +65,20 @@
 
 (defn- delimited-transport-seq
   [client termination-statuses delimited-slots]
+  (debug/prn-thread "In delimited-transport-seq")
+  (debug/prn-thread "DTS, Client has arity 0" (.HasArity ^clojure.lang.IFnArity client 0))
+  (debug/prn-thread "DTS, Client has arity 1" (.HasArity ^clojure.lang.IFnArity client 1))
+  
   (with-meta
     (comp (partial take-until (comp #(seq (clojure.set/intersection % termination-statuses))
                                     set
                                     :status))
+		   #(do (debug/prn-thread "dts 1") %)
           (let [keys (keys delimited-slots)]
             (partial filter #(= delimited-slots (select-keys % keys))))
+		   #(do (debug/prn-thread "dts 2") %)	
           client
+		  #(do (debug/prn-thread "dts 3") %)
           #(merge % delimited-slots))
     (-> (meta client)
         (update-in [::termination-statuses] (fnil into #{}) termination-statuses)
@@ -83,7 +90,9 @@
    messages related to the message :id that will terminate upon receipt of a
    \"done\" :status."
   [client {:keys [id] :as msg :or {id (uuid)}}]
+  (debug/prn-thread "message: " client ", id" id ", msg: " msg)
   (let [f (delimited-transport-seq client #{"done" :done} {:id id})]
+    (debug/prn-thread "message: finished call to delimited-transport seq")
     (f (assoc msg :id id))))
 
 (defn new-session
@@ -91,6 +100,7 @@
    of an existing retained session, the id of which must be provided as a :clone
    kwarg.  Returns the new session's id."
   [client & {:keys [clone]}]
+  (debug/prn-thread "new-session: clone= " clone)
   (let [resp (first (message client (merge {:op "clone"} (when clone {:session clone}))))]
     (or (:new-session resp)
         (throw (InvalidOperationException.                                                ;;; IllegalStateException.

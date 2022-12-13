@@ -42,7 +42,7 @@
   ([my-port ack-port]
    (send-ack my-port ack-port t/bencode))
   ([my-port ack-port transport-fn]
-   (with-open [^java.io.Closeable transport (nrepl/connect :transport-fn transport-fn
+   (with-open [^System.IDisposable transport (nrepl/connect :transport-fn transport-fn       ;;; ^java.io.Closeable
                                                            :port ack-port)]
      (let [client (nrepl/client transport 1000)]
        ;; consume response from the server, solely to let that side
