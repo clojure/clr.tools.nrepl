@@ -53,7 +53,7 @@
                (do (reset! failure msg) (throw msg))
                msg))))
       write
-      (fn [] (when close (close)) (future-cancel msg-pump))))))                     ;;; DM: Added then (when close ... )  - close might be nil, see default from 2-arg version
+      (fn [] (close) (future-cancel msg-pump))))))
 
 (defmulti #^{:private true} <bytes class)
 
@@ -90,8 +90,7 @@
          (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server"))
          (throw e#)))
      (catch Exception e#                                                        ;;; Throwable
-	   (debug/prn-thread "caught exception. message = " (.Message e#))
-	   (debug/prn-thread "Socket is " ~s ", class= " (class ~s))
+
        (if (and ~s (not (.Connected ~s)))                                       ;;; .isConnected
          (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server"))
          (throw e#)))))
@@ -106,14 +105,13 @@
   (let [buffer (MemoryStream.)]                                           ;;; ByteArrayOutputStream
     (try
       (bencode/write-bencode buffer thing))
-    (.Write ^Stream output (.ToArray buffer) (int 0) (int (.Length buffer)))))                 ;;; .write .toByteArray  ^OutputStream  -- the only 1-arg overload for a network stream takes a span.  Need three-arg overload to take Byte[].
+    (.Write ^Stream output (.ToArray buffer) (int 0) (int (.Length buffer)))))                 ;;; .write .toByteArray  ^OutputStream  -- adding the start/count arguments -- else we get the one-arg version that takes a span
 
 (defn bencode
   "Returns a Transport implementation that serializes messages
    over the given Socket or InputStream/OutputStream using bencode."
-  ([^Socket s] (debug/prn-thread "In bencode, socket = " s) (bencode s s s))
+  ([^Socket s] (bencode s s s))
   ([in out & [^Socket s]]
-   (debug/prn-thread "in bencode, three arg")
    (let [in (PushbackInputStream. (io/input-stream in))
          out (io/output-stream out)]
      (fn-transport

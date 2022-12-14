@@ -191,8 +191,6 @@
 
 (defn #^{:private true} write-netstring*
   [#^Stream output #^|System.Byte[]| content]                                          ;;; #^OutputStream  #^"[B"
-  (debug/prn-thread "In bencode/write-netstring* " output " --- " (.GetString System.Text.Encoding/UTF8 content))
-  
   (let [ lenbytes (string>payload (str (alength content))) ]                           ;;; added line
   (doto output
     (.Write lenbytes 0 (alength lenbytes))                                             ;;; (.write (string>payload (str (alength content))))

@@ -80,7 +80,7 @@
         (ToString []                                                               ;;; toString
           (.ToString writer))                                                      ;;; .toString
         (Write                                                                     ;;; write
-          ([x]  (debug/prn-thread "wqw: writing " (class x))
+          ([x]
            (let [cbuf (to-char-array x)]
              (.Write ^TextWriter this cbuf (int 0) (count cbuf))))                 ;;; .write ^Writer 
           ([x off len]
@@ -146,7 +146,7 @@
 		  (fn [] (send-chunks)(send-rest))]
     (-> (proxy [TextWriter] []
           (Write
-            ([x] (debug/prn-thread "rpw: writing " (class x))
+            ([x]
               (let [cbuf (to-char-array x)]			  
 			    (.Append sb cbuf 0 (count cbuf)))
 			  (send-chunks))

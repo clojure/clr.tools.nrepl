@@ -15,7 +15,7 @@
                                  response-seq
                                  response-values
                                  url-connect]]
-   [cnrepl.ack :as ack]
+   [cnrepl.ack :as ack] [cnrepl.debug :as debug]
    [cnrepl.middleware.caught :as middleware.caught]
    [cnrepl.middleware.print :as middleware.print]
    [cnrepl.middleware.session :as session]
@@ -38,7 +38,7 @@
 (def transport-fn->protocol
   "Add your transport-fn var here so it can be tested"
   {#'transport/bencode "nrepl"
-   #'transport/edn "nrepl+edn"})  
+   #_#'transport/edn #_"nrepl+edn"})  
    
 ;; There is a profile that adds the fastlane dependency and test
 ;; its transports.
@@ -72,6 +72,7 @@
    runs the test against that server, then cleans up all sessions."
   [f]
   (doseq [transport-fn transport-fns]
+    (debug/prn-thread "Starting server-for-transport: " transport-fn ", " transport-fns)
     (start-server-for-transport-fn transport-fn f)
     (session/close-all-sessions!)))
 
@@ -84,10 +85,15 @@
                  transport# (connect :port (:port *server*)
                                      :transport-fn *transport-fn*)]
        (let [~'transport transport#
+	         ~'_ (debug/prn-thread "Creating client")
              ~'client (client transport# Int32/MaxValue)                          ;;; Long/MAX_VALUE
-             ~'session (client-session ~'client)
+ 	         ~'_ (debug/prn-thread "Creating session")
+			 ~'session (client-session ~'client)
+	         ~'_ (debug/prn-thread "Creating timeout client")
              ~'timeout-client (client transport# 1000)
+	         ~'_ (debug/prn-thread "Creating time-client session")
              ~'timeout-session (client-session ~'timeout-client)
+	         ~'_ (debug/prn-thread "Creating funcs")
              ~'repl-eval #(message % {:op "eval" :code %2})
              ~'repl-values (comp response-values ~'repl-eval)]
          ~@body))))

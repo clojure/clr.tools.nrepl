@@ -21,7 +21,6 @@
 (defn handle*
   [msg handler transport]
   (try
-    (debug/prn-thread "handle* " msg ", transport " (.GetHashCode transport))    ;DEBUG  
     (handler (assoc msg :transport transport))
     (catch Exception t                                                             ;;; Throwable
       (log t "Unhandled REPL handler exception processing message" msg))))
@@ -39,14 +38,12 @@
    Returns nil when [recv] returns nil for the given transport."
   [handler transport]
   (when-let [msg (normalize-msg (t/recv transport))]
-    (debug/prn-thread "handle posting future for " msg) ;DEBUG
     (future (handle* msg handler transport))
     (recur handler transport)))
 
 (defn- safe-close
   [^IDisposable x]                                                                    ;;; ^java.io.Closeable
   (try
-    (debug/prn-thread "safe-close: Disposing a " (class x) " " (.GetHashCode x))
     (.Dispose x)                                                                      ;;; .close
     (catch Exception e                                                                ;;; java.io.IOException
       (log e "Failed to close " x))))
@@ -56,16 +53,13 @@
     :as server}]
   (when (.IsBound (.Server server-socket))                                                     ;;; when-not (.isClosed server-socket)
     (let [sock (.AcceptTcpClient server-socket)]                                               ;;; .accept
-	  (debug/prn-thread "Accepting connection")  ;DEBUG
       (future (let [transport (transport sock)]
-				(debug/prn-thread "accept-connection: created transport " (.GetHashCode transport))  ;DEBUG
                 (try
                   (swap! open-transports conj transport)
                   (when greeting (greeting transport))
                   (handle handler transport)
                   (finally
                     (swap! open-transports disj transport)
-					(debug/prn-thread "accept-connection: closing transport " (.GetHashCode transport))  ;DEBUG
                     (safe-close transport)))))
       (future (accept-connection server)))))
 
@@ -73,7 +67,6 @@
   "Stops a server started via `start-server`."
   [{:keys [open-transports ^TcpListener server-socket] :as server}]                        ;;; ^ServerSocket
   (returning server
-            (debug/prn-thread "Stoping server " (:port server))                    ;DEBUG 
             (when (.IsBound (.Server server-socket))                                          ;;; DM: ADDED
 	          (.Stop server-socket))                          ;;; DM: ADDED   SocketShutdown/Both
             (.Stop server-socket)                                                    ;;; .close
@@ -211,7 +204,6 @@
                         transport-fn
                         greeting-fn
                         (or handler (default-handler)))]
-    (debug/prn-thread "Starting server " server) ;DEBUG
     (.Start ss 0)                                                                               ;;; DM: ADDED
     (future (accept-connection server))
     (when ack-port
