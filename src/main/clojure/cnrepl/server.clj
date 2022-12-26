@@ -30,6 +30,7 @@
    The EDN transport, and other transports that allow more types/data structures
    than bencode, as there's more opportunity to be out of specification."
   [msg]
+  (debug/prn-thread "normalize-msg: " msg)
   (cond-> msg
     (keyword? (:op msg)) (update :op name)))
 
@@ -130,6 +131,7 @@
                         :state       state
                         :middleware (concat default-middleware additional-middleware)}))
     (fn [msg]
+      (debug/prn-thread "In default handler, msg = " msg)
       (binding [dynamic-loader/*state* state]
         ((:handler @state) msg)))))
 
@@ -204,7 +206,7 @@
                         transport-fn
                         greeting-fn
                         (or handler (default-handler)))]
-    (.Start ss 0)                                                                               ;;; DM: ADDED
+    ;;(.Start ss 0)   -- started above                                                                            ;;; DM: ADDED
     (future (accept-connection server))
     (when ack-port
       (ack/send-ack (:port server) ack-port transport-fn))

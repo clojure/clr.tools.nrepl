@@ -50,9 +50,9 @@
                    head)]
     ^{::transport transport ::timeout response-timeout}
     (fn this
-      ([] (or (second @latest-head)
+      ([] (debug/prn-thread "client read")  (or (second @latest-head)
               (restart)))
-      ([msg]
+      ([msg] (debug/prn-thread " client write: " msg)
        (transport/send transport msg)
        (this)))))
 
@@ -71,7 +71,9 @@
                                     :status))
           (let [keys (keys delimited-slots)]
             (partial filter #(= delimited-slots (select-keys % keys))))
+		  (fn [v] (debug/prn-thread "dts: after client call") v)
           client
+		  (fn [v] (debug/prn-thread "dts: before client call") v)
           #(merge % delimited-slots))
     (-> (meta client)
         (update-in [::termination-statuses] (fnil into #{}) termination-statuses)
@@ -175,8 +177,15 @@
   [& {:keys [port host transport-fn] :or {transport-fn transport/bencode
                                           host "127.0.0.1"}}]
   {:pre [transport-fn port]}
-  (transport-fn (.Client (System.Net.Sockets.TcpClient. ^String host (int port)))))    ;;; java.net.Socket. 
-
+  (debug/prn-thread "In connect, host = " host ", port = " port)
+  (let [ tcp-client (System.Net.Sockets.TcpClient. ^String host (int port))
+        _ (debug/prn-thread "tcp client, connected - " (.Connected tcp-client) )
+		client (.Client tcp-client)
+		_ (debug/prn-thread "client = " (class client) ", connected " (.Connected client) ", isbound " (.IsBound client))]
+		(transport-fn client))
+;;; original, breaking down for debug  (transport-fn (.Client (System.Net.Sockets.TcpClient. ^String host (int port))))    ;;; java.net.Socket. \
+  )
+  
 (defn- ^System.Uri to-uri                                                              ;;; ^java.net.URI
   [x]
   {:post [(instance? System.Uri %)]}                                                   ;;; java.net.URI

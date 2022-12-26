@@ -31,7 +31,7 @@
   (recv [this] (.recv this Int64/MaxValue))                                         ;;; Long/MAX_VALUE
   (recv [this timeout] (recv-fn timeout))
   System.IDisposable                                                                ;;; java.io.Closeable
-  (Dispose [this] (close)))                                                         ;;; (close [this] (close)))  TODO: This violates good IDisposable practice
+  (Dispose [this] (close)))                                                         ;;; (close [this] (close))  TODO: This violates good IDisposable practice
 
 (defn fn-transport
   "Returns a Transport implementation that delegates its functionality
@@ -41,6 +41,7 @@
    (let [read-queue (sc/make-simple-sync-channel)                                   ;;; (SynchronousQueue.)
          msg-pump (future (try
                             (while true
+							  (debug/prn-thread "msg-pump read")
                               (sc/put read-queue (transport-read)))                 ;;; .put
                             (catch Exception t                                      ;;; Throwable
                               (sc/put read-queue t))))]                             ;;; .put
@@ -48,12 +49,14 @@
       (let [failure (atom nil)]
         #(if @failure
            (throw @failure)
-           (let [msg (sc/poll read-queue % )]                                       ;;; .poll, remove TimeUnit/MILLISECONDS
+           (let [_ (debug/prn-thread "fnt: before poll")
+         		   msg (sc/poll read-queue % )
+				 _ (debug/prn-thread "fnt: after poll = " msg)]                                       ;;; .poll, remove TimeUnit/MILLISECONDS
              (if (instance? Exception msg)                                          ;;; Throwable
-               (do (reset! failure msg) (throw msg))
+               (do (debug/prn-thread "fnt: Exception returned") (reset! failure msg) (throw msg))
                msg))))
       write
-      (fn [] (close) (future-cancel msg-pump))))))
+      (fn [] (when close (close)) (future-cancel msg-pump))))))                    ;;; added the when condition.  Looks like close could be nil.
 
 (defmulti #^{:private true} <bytes class)
 
@@ -104,7 +107,9 @@
   [output thing]
   (let [buffer (MemoryStream.)]                                           ;;; ByteArrayOutputStream
     (try
+	  (debug/prn-thread "safe-write-bencode start: " thing)
       (bencode/write-bencode buffer thing))
+	 (debug/prn-thread "safe-write-bencode got " (.ToArray buffer)) 
     (.Write ^Stream output (.ToArray buffer) (int 0) (int (.Length buffer)))))                 ;;; .write .toByteArray  ^OutputStream  -- adding the start/count arguments -- else we get the one-arg version that takes a span
 
 (defn bencode
@@ -113,7 +118,9 @@
   ([^Socket s] (bencode s s s))
   ([in out & [^Socket s]]
    (let [in (PushbackInputStream. (io/input-stream in))
+         _ (debug/prn-thread "t/bencode getting ready to make output-stream, connected = " (.Connected out))
          out (io/output-stream out)]
+	 (debug/prn-thread "t/bencode made output stream")
      (fn-transport
       #(let [payload (rethrow-on-disconnection s (bencode/read-bencode in))
              unencoded (<bytes (payload "-unencoded"))

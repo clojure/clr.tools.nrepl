@@ -83,8 +83,15 @@
 (def colon 58)
 
 (defn #^{:private true} read-byte
-  #^long [#^Stream input]                                                                   ;;; #^InputStream
-  (let [c (.ReadByte input)]                                                                ;;; .read
+  #^long [#^PushbackInputStream input]  ;;; #^InputStream
+  (debug/prn-thread "read-byte start, input class = " (class input))
+  (try (.ReadByte input)
+     (catch Exception e
+	    (debug/prn-thread "Yep, can't read a single byte")
+		(debug/prn-thread e)
+		(throw e)))
+  (let [c (.ReadByte input)]        ;;; .read
+    (debug/prn-thread "read-byte, read = " c)
     (when (neg? c)
       (throw (EndOfStreamException. "Invalid netstring. Unexpected end of input.")))        ;;; EOFException.
     ;; Here we have a quirk for example. `.read` returns -1 on end of
@@ -151,9 +158,18 @@
 (declare #^|System.Byte[]| string>payload                                                  ;;;  #^"[B"
          #^String string<payload)
 
+;(defn #^{:private true} read-netstring*      ;;; DM: Rewriting for debugging
+;  [input]
+;  (read-bytes input (read-long input colon)))
+
 (defn #^{:private true} read-netstring*
   [input]
-  (read-bytes input (read-long input colon)))
+  (debug/prn-thread "read-netstring* start, getting ready to read long")
+  (let [cnt (read-long input colon)
+        _   (debug/prn-thread "read-netstring*, count - " cnt)
+	    bs (read-bytes input cnt)]
+	(debug/prn-thread "read-netstring* bytes = " bs)
+	bs))
 
 ;; And the public facing API: `read-netstring`.
 
@@ -237,7 +253,9 @@
 
 (defn #^{:private true} read-token
   [#^PushbackInputStream input]
+  (debug/prn-thread "read-token start")
   (let [ch (read-byte input)]
+    (debug/prn-thread "read-token, 1st byte = " ch)
     (cond
       (= (long e) ch) nil
       (= i ch) :integer
@@ -255,7 +273,9 @@
 (defn read-bencode
   "Read bencode token from the input stream."
   [input]
+  (debug/prn-thread "readb start")
   (let [token (read-token input)]
+     (debug/prn-thread "readb got token" token)
     (case token
       :integer (read-integer input)
       :list    (read-list input)
@@ -286,10 +306,14 @@
 
 (defn #^{:private true} read-map
   [input]
-  (->> (token-seq input)
+  (debug/prn-thread "read-map start")
+  (let [v (->> (token-seq input)
        (partition 2)
        (map (fn [[k v]] [(string<payload k) v]))
-       (into {})))
+       (into {}))]
+	   
+	  (debug/prn-thread "read-map done, got " v)
+	  v))
 
 ;; The final missing piece is `token-seq`. This a just a simple
 ;; sequence which reads tokens until the next `\e`.
@@ -326,6 +350,7 @@
 
 (defmethod write-bencode :default
   [output x]
+  (debug/prn-thread "write-bencode :default has been called!!!!!!")
   (throw (ArgumentException. (str "Cannot write value of type " (class x)))))     ;;; IllegalArgumentException.
 
 ;; The following methods should be pretty straight-forward.

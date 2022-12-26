@@ -11,21 +11,55 @@
 (ns #^{:author "David Miller"
        :doc "A simple synchronous channel"}
   cnrepl.sync-channel
-  (:refer-clojure :exclude (take)))
+  (:refer-clojure :exclude (take))
+  (:require [cnrepl.debug :as debug])
+  (:import [System.Threading Monitor WaitHandle AutoResetEvent]))
   
  ;; Reason for existence
  ;;
  ;; The original (ClojureJVM) FnTransport code uses a java.util.concurrent.SynchronousQueue.
- ;; However, in that use there is a single producer and a single consumer.
- ;; The CLR does not supply such a construct.  
- ;; (The closest equivalent would be a System.Collections.Concurrent.BlockingCollection<T> with zero capacity, 
- ;; but that class only allows capacity greater than zero.)
+ ;;  The description in the Java documentation reads:
  ;;
- ;; Rather then do a full-blown implementation of a synchronous queue, 
- ;; something along the lines of Doug Lea's C# implementation
- ;; http://code.google.com/p/netconcurrent/source/browse/trunk/src/Spring/Spring.Threading/Threading/Collections/SynchronousQueue.cs
- ;; we can go with a much simpler construct - a synchronous channel between producer and consumer
-;;  that blocks either one if the other is not waiting.
+ ;;     A blocking queue in which each insert operation must wait for a corresponding remove operation by another thread, 
+ ;;     and vice versa. A synchronous queue does not have any internal capacity, not even a capacity of one. You cannot 
+ ;;     peek at a synchronous queue because an element is only present when you try to remove it; you cannot insert an 
+ ;;     element (using any method) unless another thread is trying to remove it; you cannot iterate as there is nothing 
+ ;;     to iterate. The head of the queue is the element that the first queued inserting thread is trying to add to the 
+ ;;     queue; if there is no such queued thread then no element is available for removal and poll() will return null. 
+ ;;     For purposes of other Collection methods (for example contains), a SynchronousQueue acts as an empty collection. 
+ ;;     This queue does not permit null elements. Synchronous queues are similar to rendezvous channels used in CSP and Ada. 
+ ;;     They are well suited for handoff designs, in which an object running in one thread must sync up with an object 
+ ;;     running in another thread in order to hand it some information, event, or task.
+ ;;
+ ;;  In the use here, there is a single producer and a single consuer.
+ ;;
+ ;;  The CLR does not supply such a construct.  The closest equivalent would be a System.Collections.Concurrent.BlockingCollection<T> 
+ ;;  with zero capacity, but that class only allows capacity greater than zero.  With capacity one, it would not require a producer 
+ ;;  or a consumer to wait for its matching consumer/producer to come along.
+ ;;  
+ ;;  Another possibility might be the channels in System.Threading.Channels.  However, it does not seem to be able to force 
+ ;;  a producer to wait for a consumer.  And at any rate, it is not available for .NET Framework.
+ ;;
+ ;;
+ ;;  Because our usage can be restricted to one allowing only one consumer waiting and one producer waiting at a time, we do not
+ ;;  need to deal with queuing producers or consumers and hence with fairness issues and the like.
+ ;;
+ ;;  Because this sort of construct can be tricky to get right, I'll spend a little time describing the implementation
+ ;;  in the hopes of convincing you -- well, me, really -- that it's correct.
+ ;;
+ ;;  Single-threadedness for producers and consumers is enforced by lock management.
+ ;;  A producer calling put trys to get the p-lock.  
+ ;;    If it fails to get the lock, there must be a producer already working, so an error is thrown.
+ ;;    If it succeeds, it has the lock until it is released by a consumer.
+ ;;
+ ;;  Similarly for a consumer.
+ ;;
+ ;;  Coordination between consumer and producer is implemented by a pair of AutoResetEvents.
+ ;;  A producer enters, sets the value field, signals the consumer-wait-event and waits to be signaled to continue.
+ ;;  A consumer enters, waits for its signal, grabs the value, sets the value field to nil, and signals the waiting producer.
+ ;;  Access to the value field comes before the wait for the producer and after the wait for the consumer.
+ ;;  Thus, we do not need to protect access to the value field.
+ 
  
 (defprotocol SyncChannel
   "A synchronous channel (single-threaded on producer and consumer)"
@@ -33,81 +67,60 @@
   (take  [this]         "Get a value from this channel (Consumer)")
   (poll  [this] [this timeout]    "Get a value from this channel if one is available (within the designated timeout period)"))
   
-
-(definterface ITakeValue 
-   (takeValue []))
-  
+	   
+ 
  ;; SimpleSyncChannel assumes there is a single producer thread and a single consumer thread.
- (deftype SimpleSyncChannel [^:unsynchronized-mutable value 
-                             ^:volatile-mutable c-waiting?
-							 ^:volatile-mutable p-waiting?
-							 lock]
+ 
+ (deftype SimpleSyncChannel [^:volatile-mutable value 
+                             p-lock
+							 c-lock
+							 ^AutoResetEvent producer-wait-event
+							 ^AutoResetEvent consumer-wait-event]
   SyncChannel
   (put [this v] 
-    (when (nil? v)
-	  (throw (NullReferenceException. "Cannot put nil on SyncChannel")))
-    (locking lock
-	  (when p-waiting?
-	     (throw (Exception. "Producer not single-threaded")))
+    (try 
+	  (debug/prn-thread "sc:put start" v)
+	  (when-not (Monitor/TryEnter p-lock)
+	    (throw (Exception. "Producer not single-threaded")))
 	  (set! value v)
-      (System.Threading.Monitor/Pulse lock)
-	  (set! p-waiting? true)
-      (System.Threading.Monitor/Wait lock)
-      (set! p-waiting? false)))
-	     
-  (poll [this] 
-    (locking lock
-	  (when c-waiting?
-	    (throw (Exception. "Consumer not single-threaded")))
-	  (when-not (nil? value)
-	    (.takeValue ^ITakeValue this))))
-		  
-  (poll [this timeout]
-    (locking lock
-	  (when c-waiting?
-	    (throw (Exception. "Consumer not single-threaded")))
-      (if (nil? value)
-        (do 
-		  (set! c-waiting? true)
-		  (let [result 
-		        (when (System.Threading.Monitor/Wait lock (int timeout))
-		           (.takeValue ^ITakeValue this))]
-		    (set! c-waiting? false)
-			result))
-	    (.takeValue ^ITakeValue this))))
-		
+	  (WaitHandle/SignalAndWait consumer-wait-event producer-wait-event)
+	  (debug/prn-thread "sc:put finish")
+	  (finally 
+	    (Monitor/Exit p-lock))))
+	  
+	
   (take [this]
-    (locking lock
-	   (when c-waiting?
-	   	     (throw (Exception. "Consumer not single-threaded")))
-      (when (nil? value)
-        (set! c-waiting? true)
-        (System.Threading.Monitor/Wait lock)
-		(set! c-waiting? false))
-	  (.takeValue ^ITakeValue this)))
+    (poll this -1))	
 
-  ITakeValue
-  (takeValue [this]
-    (let [curval value]
-      (set! value nil)
-      (System.Threading.Monitor/Pulse lock)
-	  curval)))
-
+  (poll [this] 
+    (poll this 0))
+	
+  (poll [this timeout]
+    (try 
+	  (debug/prn-thread "sc:poll start")
+	  (when-not (Monitor/TryEnter c-lock)
+	    (throw (Exception. "Consumer not single-threaded")))
+		
+	  (when (.WaitOne consumer-wait-event timeout)
+	    ;; We were signaled, so a value is waiting
+	    (let [v value]
+	      (set! value nil)
+		  (.Set producer-wait-event)
+		 v))
+	  (finally 
+	    (debug/prn-thread "sc:poll finish")
+	    (Monitor/Exit c-lock)))))
+	    
+		 
+			
 (defn make-simple-sync-channel []
-  (SimpleSyncChannel. nil false false (Object.)))
-  
+  (SimpleSyncChannel. nil (Object.) (Object.) (AutoResetEvent. false) (AutoResetEvent. false)))	
   
 (comment
-   
-(def prn-agent (agent nil))
-(defn sprn [& strings] (send-off prn-agent (fn [v] (apply prn strings))))  
-(defn f [n]
-   (let [sc (make-simple-sync-channel)
-	      p (agent nil)
-		  c (agent nil)]
-	  (send c (fn [v] (dotimes [i n] (sprn (str "Consumer " i)) (sprn (str "====> "(take sc))))))
-	  (send p (fn [v] (dotimes [i n] (sprn (str "Producer " i)) (put sc i))))
-	  [p c sc]))
-)	  
-	  
-   
+
+  (require '[cnrepl.debug :as debug])
+  (def q (make-simple-sync-channel))
+  (future (dotimes [i 5] (debug/prn-thread "put start " i) (put q i) (debug/prn-thread "put finish " i)))
+  (future (dotimes [i 5] (debug/prn-thread "take start " i) (debug/prn-thread "take finish " (take q))))
+  
+  )
