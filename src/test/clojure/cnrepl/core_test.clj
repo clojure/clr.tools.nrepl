@@ -85,15 +85,10 @@
                  transport# (connect :port (:port *server*)
                                      :transport-fn *transport-fn*)]
        (let [~'transport transport#
-	         ~'_ (debug/prn-thread "Creating client")
              ~'client (client transport# Int32/MaxValue)                          ;;; Long/MAX_VALUE
- 	         ~'_ (debug/prn-thread "Creating session")
 			 ~'session (client-session ~'client)
-	         ~'_ (debug/prn-thread "Creating timeout client")
-             ~'timeout-client (client transport# 1000)
-	         ~'_ (debug/prn-thread "Creating time-client session")
-             ~'timeout-session (client-session ~'timeout-client)
-	         ~'_ (debug/prn-thread "Creating funcs")
+             ;;~'timeout-client (client transport# 1000)
+             ;;~'timeout-session (client-session ~'timeout-client)
              ~'repl-eval #(message % {:op "eval" :code %2})
              ~'repl-values (comp response-values ~'repl-eval)]
          ~@body))))

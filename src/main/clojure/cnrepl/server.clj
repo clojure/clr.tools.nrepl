@@ -30,7 +30,6 @@
    The EDN transport, and other transports that allow more types/data structures
    than bencode, as there's more opportunity to be out of specification."
   [msg]
-  (debug/prn-thread "normalize-msg: " msg)
   (cond-> msg
     (keyword? (:op msg)) (update :op name)))
 
@@ -53,8 +52,8 @@
   [{:keys [^TcpListener server-socket open-transports transport greeting handler]          ;;; ^ServerSocket
     :as server}]
   (when (.IsBound (.Server server-socket))                                                     ;;; when-not (.isClosed server-socket)
-    (let [sock (.AcceptTcpClient server-socket)]                                               ;;; .accept
-      (future (let [transport (transport sock)]
+    (let [tcp-client(.AcceptTcpClient server-socket)]                                               ;;; .accept
+      (future (let [transport (transport (.Client tcp-client))]
                 (try
                   (swap! open-transports conj transport)
                   (when greeting (greeting transport))
@@ -182,7 +181,6 @@
 ;;;                        greeting-fn
 ;;;                        (or handler (default-handler)))]
 ;;;	(debug/prn-thread "Starting server " server) ;DEBUG
-;;;    (.Listen ss 0)                                                                               ;;; DM: ADDED
 ;;;    (future (accept-connection server))
 ;;;    (when ack-port
 ;;;      (ack/send-ack (:port server) ack-port transport-fn))

@@ -97,8 +97,8 @@
   * thunk, a Runnable, the task itself,
    * ack, another Runnable, ran to notify of successful execution of thunk.
    The thunk/ack split is meaningful for interruptible eval: only the thunk can be interrupted."
-  [id ^ThreadStart thunk ^ThreadStart ack]
-  (let [wc (gen-delegate System.Threading.WaitCallback [_] (do (.Invoke thunk) (.Invoke ack)))]
+  [id thunk ack]
+  (let [wc (gen-delegate System.Threading.WaitCallback [_] (do (.invoke thunk) (.invoke ack)))]
     (System.Threading.ThreadPool/QueueUserWorkItem wc)))
   
   
@@ -162,6 +162,7 @@
   defaults to 'user, and other bindings as optionally provided in
   `session` are merged in."
   ([{:keys [transport session out-limit] :as msg}]
+   (debug/prn-thread "s/create-session, session = " session)
    (let [id (uuid)
          {:keys [input-queue stdin-reader]} (session-in id transport)
          the-session (atom (into (or (some-> session deref) {})
@@ -219,7 +220,7 @@
         thread (atom nil)
         main-loop #(try
                      (loop []
-                       (let [[exec-id ystem.Threading.WaitCallback r ystem.Threading.WaitCallback ack] (.take queue)]        ;;; ^Runnable ^Runnable
+                       (let [[exec-id System.Threading.WaitCallback r System.Threading.WaitCallback ack] (.Take queue)]        ;;; ^Runnable ^Runnable  .take
                          (reset! running exec-id)
                          (when (try
                                  (System.Threading.ThreadPool/QueueUserWorkItem r)                                           ;;; (.run r)

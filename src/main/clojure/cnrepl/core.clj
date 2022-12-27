@@ -50,9 +50,9 @@
                    head)]
     ^{::transport transport ::timeout response-timeout}
     (fn this
-      ([] (debug/prn-thread "client read")  (or (second @latest-head)
+      ([] #_(debug/prn-thread "client read")  (or (second @latest-head)
               (restart)))
-      ([msg] (debug/prn-thread " client write: " msg)
+      ([msg] #_(debug/prn-thread " client write: " msg)
        (transport/send transport msg)
        (this)))))
 
@@ -71,9 +71,7 @@
                                     :status))
           (let [keys (keys delimited-slots)]
             (partial filter #(= delimited-slots (select-keys % keys))))
-		  (fn [v] (debug/prn-thread "dts: after client call") v)
           client
-		  (fn [v] (debug/prn-thread "dts: before client call") v)
           #(merge % delimited-slots))
     (-> (meta client)
         (update-in [::termination-statuses] (fnil into #{}) termination-statuses)
@@ -93,7 +91,9 @@
    of an existing retained session, the id of which must be provided as a :clone
    kwarg.  Returns the new session's id."
   [client & {:keys [clone]}]
+  (debug/prn-thread "new-session start, clone = " clone)
   (let [resp (first (message client (merge {:op "clone"} (when clone {:session clone}))))]
+    (debug/prn-thread "new-session, resp = " resp)
     (or (:new-session resp)
         (throw (InvalidOperationException.                                                ;;; IllegalStateException.
                 (str "Could not open new session; :clone response: " resp))))))
@@ -105,7 +105,9 @@
    messages related to the :session id that will terminate when the session is
    closed."
   [client & {:keys [session clone]}]
+  (debug/prn-thread "client-session start: session = " session ", clone = " clone)
   (let [session (or session (apply new-session client (when clone [:clone clone])))]
+    (debug/prn-thread "client session, cont, session = " session)
     (delimited-transport-seq client #{"session-closed"} {:session session})))
 
 (defn combine-responses
@@ -177,14 +179,8 @@
   [& {:keys [port host transport-fn] :or {transport-fn transport/bencode
                                           host "127.0.0.1"}}]
   {:pre [transport-fn port]}
-  (debug/prn-thread "In connect, host = " host ", port = " port)
-  (let [ tcp-client (System.Net.Sockets.TcpClient. ^String host (int port))
-        _ (debug/prn-thread "tcp client, connected - " (.Connected tcp-client) )
-		client (.Client tcp-client)
-		_ (debug/prn-thread "client = " (class client) ", connected " (.Connected client) ", isbound " (.IsBound client))]
-		(transport-fn client))
-;;; original, breaking down for debug  (transport-fn (.Client (System.Net.Sockets.TcpClient. ^String host (int port))))    ;;; java.net.Socket. \
-  )
+  (transport-fn (.Client (System.Net.Sockets.TcpClient. ^String host (int port)))))    ;;; java.net.Socket. \
+  
   
 (defn- ^System.Uri to-uri                                                              ;;; ^java.net.URI
   [x]

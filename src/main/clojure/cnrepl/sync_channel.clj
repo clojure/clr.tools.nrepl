@@ -79,12 +79,12 @@
   SyncChannel
   (put [this v] 
     (try 
-	  (debug/prn-thread "sc:put start" v)
+	  #_(debug/prn-thread "sc:put start" v)
 	  (when-not (Monitor/TryEnter p-lock)
 	    (throw (Exception. "Producer not single-threaded")))
 	  (set! value v)
 	  (WaitHandle/SignalAndWait consumer-wait-event producer-wait-event)
-	  (debug/prn-thread "sc:put finish")
+	  #_(debug/prn-thread "sc:put finish")
 	  (finally 
 	    (Monitor/Exit p-lock))))
 	  
@@ -97,7 +97,7 @@
 	
   (poll [this timeout]
     (try 
-	  (debug/prn-thread "sc:poll start")
+	  #_(debug/prn-thread "sc:poll start")
 	  (when-not (Monitor/TryEnter c-lock)
 	    (throw (Exception. "Consumer not single-threaded")))
 		
@@ -108,7 +108,7 @@
 		  (.Set producer-wait-event)
 		 v))
 	  (finally 
-	    (debug/prn-thread "sc:poll finish")
+	    #_(debug/prn-thread "sc:poll finish")
 	    (Monitor/Exit c-lock)))))
 	    
 		 
