@@ -8,10 +8,9 @@
 
 (defn echo-handler [transport]
     (loop []
-	  (debug/prn-thread "echo-handler -- reading")
+
 	  (let [msg (t/recv transport)]
-	    (debug/prn-thread "echo-handler -- read " msg)
-		(debug/prn-thread "echo-handler -- writing " msg)
+
 	    (t/send transport msg))
 	  (recur)))
 	  
@@ -35,12 +34,9 @@
   		
   
 (defn echo-client [transport]
-   
-    (debug/prn-thread "echo-client: writing: Clojure!" )		  
+   	  
 	(t/send transport "Clojure!")
-	(debug/prn-thread "echo-client: reading ") 
 	(let [msg (t/recv transport)]
-	  (debug/prn-thread "echo-client: done reading, got: " msg)
 	   msg))
 		
 (def host "127.0.0.1")

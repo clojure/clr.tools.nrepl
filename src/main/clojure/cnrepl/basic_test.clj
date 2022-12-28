@@ -7,10 +7,7 @@
 (defn echo-handler [tcp-client]
   (let [net-stream (.GetStream tcp-client)]
     (loop []
-	  (debug/prn-thread "echo-handler -- reading byte")
 	  (let [c (.ReadByte net-stream)]
-	    (debug/prn-thread "echo-handler -- read " c)
-		(debug/prn-thread "echo-handler -- writing " c)
 	    (.WriteByte net-stream (byte c)))
 	  (recur))))
 	  
@@ -40,13 +37,9 @@
     buffer))			
   
 (defn echo-client [client]
-  (debug/prn-thread "echo-client -- sending bytes")
-  (let [net-stream (.GetStream client)]
-    (debug/prn-thread "echo-client: writing " x)		  
+  (let [net-stream (.GetStream client)]	  
 	(.Write net-stream x 0 (count x))
-	(debug/prn-thread "echo-client: reading #bytes = " (count x)) 
 	(let [buffer (read-counted net-stream (count x))]
-	  (debug/prn-thread "echo-client: done reading, got: " buffer)
 	   buffer)))
 		
 (def host "127.0.0.1")

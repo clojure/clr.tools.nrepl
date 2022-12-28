@@ -72,7 +72,6 @@
    runs the test against that server, then cleans up all sessions."
   [f]
   (doseq [transport-fn transport-fns]
-    (debug/prn-thread "Starting server-for-transport: " transport-fn ", " transport-fns)
     (start-server-for-transport-fn transport-fn f)
     (session/close-all-sessions!)))
 

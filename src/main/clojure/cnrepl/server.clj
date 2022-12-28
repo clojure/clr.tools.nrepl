@@ -68,7 +68,7 @@
   [{:keys [open-transports ^TcpListener server-socket] :as server}]                        ;;; ^ServerSocket
   (returning server
             (when (.IsBound (.Server server-socket))                                          ;;; DM: ADDED
-	          (.Stop server-socket))                          ;;; DM: ADDED   SocketShutdown/Both
+	          (.Stop server-socket))
             (.Stop server-socket)                                                    ;;; .close
              (swap! open-transports
                     #(reduce
@@ -130,7 +130,6 @@
                         :state       state
                         :middleware (concat default-middleware additional-middleware)}))
     (fn [msg]
-      (debug/prn-thread "In default handler, msg = " msg)
       (binding [dynamic-loader/*state* state]
         ((:handler @state) msg)))))
 

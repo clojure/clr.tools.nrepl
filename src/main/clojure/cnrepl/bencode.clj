@@ -84,9 +84,7 @@
 
 (defn #^{:private true} read-byte
   #^long [#^PushbackInputStream input]  ;;; #^InputStream
-  #_(debug/prn-thread "read-byte start, input = " input)
   (let [c (.ReadByte input)]        ;;; .read
-    #_(debug/prn-thread "read-byte, read = " c " on " input)
     (when (neg? c)
       (throw (EndOfStreamException. "Invalid netstring. Unexpected end of input.")))        ;;; EOFException.
     ;; Here we have a quirk for example. `.read` returns -1 on end of
@@ -124,7 +122,6 @@
   (loop [n (long 0)]
     ;; We read repeatedly a byte from the input…
     (let [b (read-byte input)]
-	  #_(debug/prn-thread "read-long, read byte = " b " " (- (long b) (long 48)) " on " input)
       ;; …and stop at the delimiter.
       (cond
         (= b minus) (- (read-long input delim))
@@ -160,10 +157,8 @@
 
 (defn #^{:private true} read-netstring*
   [input]
-  #_(debug/prn-thread "read-netstring* start, getting ready to read long on " input)
   (let [cnt (read-long input colon)
 	    bs (read-bytes input cnt)]
-	#_(debug/prn-thread "read-netstring* bytes = " bs ", on " input)
 	bs))
 
 ;; And the public facing API: `read-netstring`.
@@ -266,9 +261,7 @@
 (defn read-bencode
   "Read bencode token from the input stream."
   [input]
-  #_(debug/prn-thread "readb start on " input)
   (let [token (read-token input)]
-     #_(debug/prn-thread "readb got token" token " on " input)
     (case token
       :integer (read-integer input)
       :list    (read-list input)
@@ -299,13 +292,10 @@
 
 (defn #^{:private true} read-map
   [input]
-  #_(debug/prn-thread "read-map start on " input)
   (let [v (->> (token-seq input)
        (partition 2)
        (map (fn [[k v]] [(string<payload k) v]))
        (into {}))]
-	   
-	  #_(debug/prn-thread "read-map done, got " v " on " input)
 	  v))
 
 ;; The final missing piece is `token-seq`. This a just a simple

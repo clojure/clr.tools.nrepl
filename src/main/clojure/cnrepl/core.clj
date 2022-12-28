@@ -50,9 +50,9 @@
                    head)]
     ^{::transport transport ::timeout response-timeout}
     (fn this
-      ([] #_(debug/prn-thread "client read")  (or (second @latest-head)
+      ([] (or (second @latest-head)
               (restart)))
-      ([msg] #_(debug/prn-thread " client write: " msg)
+      ([msg]
        (transport/send transport msg)
        (this)))))
 
@@ -91,9 +91,7 @@
    of an existing retained session, the id of which must be provided as a :clone
    kwarg.  Returns the new session's id."
   [client & {:keys [clone]}]
-  (debug/prn-thread "new-session start, clone = " clone)
   (let [resp (first (message client (merge {:op "clone"} (when clone {:session clone}))))]
-    (debug/prn-thread "new-session, resp = " resp)
     (or (:new-session resp)
         (throw (InvalidOperationException.                                                ;;; IllegalStateException.
                 (str "Could not open new session; :clone response: " resp))))))
@@ -105,9 +103,7 @@
    messages related to the :session id that will terminate when the session is
    closed."
   [client & {:keys [session clone]}]
-  (debug/prn-thread "client-session start: session = " session ", clone = " clone)
   (let [session (or session (apply new-session client (when clone [:clone clone])))]
-    (debug/prn-thread "client session, cont, session = " session)
     (delimited-transport-seq client #{"session-closed"} {:session session})))
 
 (defn combine-responses

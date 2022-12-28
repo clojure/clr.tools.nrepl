@@ -84,7 +84,6 @@
           (clojure.main/repl
            :eval (let [eval-fn (if eval (find-var (symbol eval)) clojure.core/eval)]
                    (fn [form]
-				     (debug/prn-thread "ie/evaluate: evaluating " form)
                      (eval-fn form)))                                                   ;;; (with-session-classloader session (eval-fn form))
            :init #(let [bindings
                         (-> (get-thread-bindings)
@@ -121,12 +120,10 @@
                     ;; *out* has :tag metadata; *err* does not
                     (.Flush ^TextWriter *err*)                                                 ;;; .flush ^Writer
                     (.Flush ^TextWriter *out*)                                                 ;;; .flush  -- added type hint  TODO -- not clear this is always true, based on a comment I made elsewhere
-					(debug/prn-thread "ie/evaluate, printing " value)
                     (t/send transport (response-for msg {:ns (str (ns-name *ns*))
                                                          :value value
                                                          ::print/keys #{:value}})))
            :caught (fn [^Exception e]                                                          ;;; Throwable
-		             (debug/prn-thread "ie/evaulate, caught " e)
                      (when-not (interrupted? e)
                        (let [resp {::caught/throwable e
                                    :status :eval-error
@@ -146,7 +143,6 @@
   [h & configuration]
   (fn [{:keys [op session id transport] :as msg}]
     (let [{:keys [exec] session-id :id} (meta session)]
-	   (debug/prn-thread "ie: " msg)
       (case op
         "eval"
         (if-not (:code msg)

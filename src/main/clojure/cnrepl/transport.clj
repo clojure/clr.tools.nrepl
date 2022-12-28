@@ -11,9 +11,9 @@
    cnrepl.version)
   (:import
    clojure.lang.RT
-   [System.IO Stream EndOfStreamException MemoryStream]                                           ;;; [java.io ByteArrayOutputStream
+   [System.IO Stream EndOfStreamException MemoryStream]                              ;;; [java.io ByteArrayOutputStream
    [clojure.lang PushbackInputStream PushbackTextReader]                             ;;; EOFException PushbackInputStream PushbackReader OutputStream]
-   (System.Net.Sockets Socket SocketException)                                       ;;; [java.net Socket SocketException]
+   (System.Net.Sockets Socket SocketException SocketShutdown)                       ;;; [java.net Socket SocketException]
    [System.Collections.Concurrent |BlockingCollection`1[System.Object]|]))           ;;; [java.util.concurrent BlockingQueue LinkedBlockingQueue SynchronousQueue TimeUnit]))
 
 (defprotocol Transport
@@ -41,7 +41,6 @@
    (let [read-queue (sc/make-simple-sync-channel)                                   ;;; (SynchronousQueue.)
          msg-pump (future (try
                             (while true
-							  #_(debug/prn-thread "msg-pump read")
                               (sc/put read-queue (transport-read)))                 ;;; .put
                             (catch Exception t                                      ;;; Throwable
                               (sc/put read-queue t))))]                             ;;; .put
@@ -49,10 +48,9 @@
       (let [failure (atom nil)]
         #(if @failure
            (throw @failure)
-           (let [msg (sc/poll read-queue % )
-				 _ (debug/prn-thread "fnt: after poll = " msg)]                                       ;;; .poll, remove TimeUnit/MILLISECONDS
+           (let [msg (sc/poll read-queue % )]                                       ;;; .poll, remove TimeUnit/MILLISECONDS
              (if (instance? Exception msg)                                          ;;; Throwable
-               (do (debug/prn-thread "fnt: Exception returned") (reset! failure msg) (throw msg))
+               (do (reset! failure msg) (throw msg))
                msg))))
       write
       (fn [] (when close (close)) (future-cancel msg-pump))))))                    ;;; added the when condition.  Looks like close could be nil.
@@ -92,7 +90,6 @@
          (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server"))
          (throw e#)))
      (catch Exception e#                                                        ;;; Throwable
-
        (if (and ~s (not (.Connected ~s)))                                       ;;; .isConnected
          (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server"))
          (throw e#)))))
@@ -106,10 +103,14 @@
   [output thing]
   (let [buffer (MemoryStream.)]                                           ;;; ByteArrayOutputStream
     (try
-	  #_(debug/prn-thread "safe-write-bencode start: " thing)
-      (bencode/write-bencode buffer thing))
-	 (debug/prn-thread "safe-write-bencode got " (.ToArray buffer)) 
-    (.Write ^Stream output (.ToArray buffer) (int 0) (int (.Length buffer)))))                 ;;; .write .toByteArray  ^OutputStream  -- adding the start/count arguments -- else we get the one-arg version that takes a span
+     (bencode/write-bencode buffer thing))
+     (.Write ^Stream output (.ToArray buffer) (int 0) (int (.Length buffer)))))                 ;;; .write .toByteArray  ^OutputStream  -- adding the start/count arguments -- else we get the one-arg version that takes a span
+
+;;; DM added
+(defn try-socket-shutdown [^Socket s]
+  (try 
+     (.Shutdown s SocketShutdown/Both)
+	 (catch Exception _)))
 
 (defn bencode
   "Returns a Transport implementation that serializes messages
@@ -132,7 +133,7 @@
                                      .Flush)))                            ;;; .flush
       (fn []
         (if s
-          (.Close s)                                                      ;;; .close
+          (do (try-socket-shutdown s) (.Close s))                                                      ;;; .close  -- added .Shutdown -- recommended before Close for sockets.
           (do
             (.Close in)                                                   ;;; .close
             (.Close out))))))))                                           ;;; .close
@@ -160,7 +161,7 @@
                                        (.Flush)))))                        ;;; .flush
       (fn []
         (if s
-          (.Close s)                                                       ;;; .close
+          (do (try-socket-shutdown s) (.Close s))                ;;; .close -- Added .Shutdown, recommended before Close for sockets.
           (do
             (.Close in)                                                    ;;; .close
             (.Close out))))))))                                            ;;; .close

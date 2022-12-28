@@ -11,10 +11,7 @@
         in (clojure.lang.PushbackInputStream. in0)
 		out (io/output-stream socket)]
     (loop []
-	  (debug/prn-thread "echo-handler -- reading byte")
 	  (let [c (.ReadByte in)]
-	    (debug/prn-thread "echo-handler -- read " c)
-		(debug/prn-thread "echo-handler -- writing " c)
 	    (.WriteByte out (byte c)))
 	  (recur))))
 	  
@@ -44,16 +41,12 @@
     buffer))			
   
 (defn echo-client [client]
-  (debug/prn-thread "echo-client -- sending bytes")
   (let [socket (.Client client)
         in0 (io/input-stream socket)  
         in (clojure.lang.PushbackInputStream. in0)
-		out (io/output-stream socket)]
-    (debug/prn-thread "echo-client: writing " x)		  
+		out (io/output-stream socket)]	  
 	(.Write out x 0 (count x))
-	(debug/prn-thread "echo-client: reading #bytes = " (count x)) 
 	(let [buffer (read-counted in (count x))]
-	  (debug/prn-thread "echo-client: done reading, got: " buffer)
 	   buffer)))
 		
 (def host "127.0.0.1")

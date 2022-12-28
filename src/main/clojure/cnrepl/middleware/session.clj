@@ -162,7 +162,6 @@
   defaults to 'user, and other bindings as optionally provided in
   `session` are merged in."
   ([{:keys [transport session out-limit] :as msg}]
-   (debug/prn-thread "s/create-session, session = " session)
    (let [id (uuid)
          {:keys [input-queue stdin-reader]} (session-in id transport)
          the-session (atom (into (or (some-> session deref) {})
