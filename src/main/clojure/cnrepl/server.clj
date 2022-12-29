@@ -39,7 +39,7 @@
    Returns nil when [recv] returns nil for the given transport."
   [handler transport]
   (when-let [msg (normalize-msg (t/recv transport))]
-    (future (handle* msg handler transport))
+    (noisy-future (handle* msg handler transport))
     (recur handler transport)))
 
 (defn- safe-close

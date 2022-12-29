@@ -1,9 +1,8 @@
 (ns cnrepl.util.lookup-test
   (:require [clojure.test :refer :all]
-            [clojure.string :as str]
             [cnrepl.bencode :as bencode]
             [cnrepl.util.lookup :as l :refer [lookup]])
-  (:import (System.IO MemoryStream)))                                 ;;; (java.io ByteArrayOutputStream))
+  (:import (System.IO MemoryStream)))                                                    ;;; (java.io ByteArrayOutputStream))
 
 (deftest lookup-test
   (testing "special sym lookup"
@@ -13,7 +12,7 @@
     (is (not-empty (lookup 'cnrepl.util.lookup 'clojure.core/map))))
 
   (testing "aliased sym lookup"
-    (is (not-empty (lookup 'cnrepl.util.lookup 'str/upper-case))))
+    (is (not-empty (lookup 'cnrepl.util.lookup 'misc/log))))                             ;;; 'str/upper-case  -- alias for str in cnrepl.util.lookup, so substituted
 
   (testing "non-qualified lookup"
     (is (not-empty (lookup 'clojure.core 'map)))
@@ -28,13 +27,13 @@
   (testing "macro lookup"
     (is (= {:ns "clojure.core"
             :name "future"
-            :macro "True"}                                                            ;;; "true"   -- Seriously, (str true) => "true" in JVM, "True" in CLR
+            :macro "True"}                                                               ;;; "true"   -- Seriously, (str true) => "true" in JVM, "True" in CLR
            (select-keys (lookup 'clojure.core 'future) [:ns :name :macro]))))
 
   (testing "special form lookup"
     (is (= {:ns "clojure.core"
             :name "let"
-            :special-form "True"}                                                     ;;; "true"   -- Seriously, (str true) => "true" in JVM, "True" in CLR
+            :special-form "True"}                                                        ;;; "true"   -- Seriously, (str true) => "true" in JVM, "True" in CLR
            (select-keys (lookup 'clojure.core 'let) [:ns :name :special-form]))))
 
   (testing "Java sym lookup"

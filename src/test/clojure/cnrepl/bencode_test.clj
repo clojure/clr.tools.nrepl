@@ -92,12 +92,14 @@
 
 (defn- >stream
   [thing & {:keys [writer]}]
-  (doto (MemoryStream.)                            ;;; (ByteArrayOutputStream.)
+  (doto (MemoryStream.)                                         ;;; (ByteArrayOutputStream.)
     (writer thing)))
 
 (defn- >output
   [& args]
-  (.GetString System.Text.Encoding/UTF8 (.ToArray (apply >stream args))))      ;;; (.toString (apply >stream args) "UTF-8"))
+  (-> >stream
+      ^MemoryStream (apply args)                                ;;; ByteArrayOutputStream
+      (#(.GetString System.Text.Encoding/UTF8 (.ToArray %)))))  ;;; (.toString "UTF-8")   had to add the .ToArray and also wrap as fn because the GetString takes args in the 'wrong' order.
 
 (deftest test-netstring-writing
   (are [x y] (= (>output (>bytes x) :writer write-netstring) y)

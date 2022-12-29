@@ -10,7 +10,7 @@
   (let [ex (when (instance? Exception ex) ex)              ;;; Throwable
         msgs (if ex msgs (cons ex msgs))]
     (binding [*out* *err*]
-      (apply println "ERROR:" msgs)
+      (apply println "ERROR:" (.Message ex) msgs)
       (when ex (println (.StackTrace ^Exception ex))))))   ;;; (.printStackTrace ^Throwable ex)
 	  
 (defmacro noisy-future

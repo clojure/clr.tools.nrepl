@@ -43,26 +43,27 @@
    to the 2 or 3 functions provided."
   ([transport-read write] (fn-transport transport-read write nil))
   ([transport-read write close]
-   (let [read-queue (sc/make-simple-sync-channel)                                 ;;; (SynchronousQueue.)
+   (let [read-queue (sc/make-simple-sync-channel)                                         ;;; (SynchronousQueue.)
+         closing (atom false)                                                             ;;; DM: Added
          msg-pump (noisy-future 
 		           (try
 				     (try 
                        (while true
-                          (sc/put read-queue (transport-read)))                   ;;; .put
-                       (catch Exception t                                         ;;; Throwable
-                              (sc/put read-queue t)))                             ;;; .put
-				      (catch System.Threading.ThreadInterruptedException _        ;;; InterruptedException
+                          (sc/put read-queue (transport-read)))                           ;;; .put
+                       (catch Exception t                                                 ;;; Throwable
+                         (when-not @closing (sc/put read-queue t))))                      ;;; .put  added when-not test.
+				      (catch System.Threading.ThreadInterruptedException _                ;;; InterruptedException
 					    nil)))]
      (FnTransport.
       (let [failure (atom nil)]
         #(if @failure
            (throw @failure)
-           (let [msg (sc/poll read-queue % )]                                     ;;; .poll, remove TimeUnit/MILLISECONDS
-             (if (instance? Exception msg)                                        ;;; Throwable
+           (let [msg (sc/poll read-queue % )]                                             ;;; .poll, remove TimeUnit/MILLISECONDS
+             (if (instance? Exception msg)                                                ;;; Throwable
                (do (reset! failure msg) (throw msg))
                msg))))
       write
-      (fn [] (when close (close)) (future-cancel msg-pump))))))                   ;;; added the when condition.  Looks like close could be nil.
+      (fn [] (reset! closing true) (when close (close)) (future-cancel msg-pump))))))     ;;; added the when condition.  Looks like close could be nil.  Added the reset!
 
 (defmulti #^{:private true} <bytes class)
 

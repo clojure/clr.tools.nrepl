@@ -196,7 +196,7 @@
   [^Thread t]
   (.Interrupt t)                                        ;;; .interrupt  -- TODO: Should this be .Abort?????
   (Thread/Sleep 100)                                    ;;; sleep
-  (future
+  (noisy-future
     (Thread/Sleep 5000)                                 ;;; sleep
     (when-not (= ThreadState/Stopped                    ;;; (Thread$State/TERMINATED)
                  (.ThreadState t))                      ;;; .getState

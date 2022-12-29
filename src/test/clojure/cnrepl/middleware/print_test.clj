@@ -43,8 +43,8 @@
        ~@body)))
 
 (defn custom-printer
-  [value ^TextWriter writer opts]                                             ;;; ^Writer
-  (.Write writer (format "<foo %s %s>" value (or (:sub opts) "..."))))        ;;; .write
+  [value ^TextWriter writer opts]                                              ;;; ^Writer
+  (.Write writer (format "<foo %s %s>" value (or (:sub opts) "..."))))         ;;; .write
 
 (deftest value-printing
   (testing-print "bad symbol should fall back to default printer"
@@ -55,7 +55,7 @@
                     ::print/keys  #{:value}
                     ::print/print 'my.missing.ns/printer}))))
   (testing-print "custom printing function symbol should be used"
-    (is (= [{:value "<foo True ...>"}]                                        ;;; true
+    (is (= [{:value "<foo True ...>"}]                                         ;;; true
            (handle {::print/keys  #{:value}
                     :value        true
                     ::print/print `custom-printer}))))
@@ -93,9 +93,13 @@
     (let [[resp1 resp2 resp3]
           (handle {:value          (range 512)
                    ::print/stream? 1})]
-      (is (.StartsWith (:value resp1) "(0 1 2 3"))            ;;; .startsWith
+      (is (-> resp1
+              ^String (:value)
+              (.StartsWith "(0 1 2 3")))                                       ;;; .startsWith
       (is (= {} (dissoc resp1 :value)))
-      (is (.EndsWith (:value resp2) "510 511)"))              ;;; .endsWith
+      (is (-> resp2
+              ^String (:value)
+              (.EndsWith "510 511)")))                                         ;;; .endsWith 
       (is (= {} (dissoc resp2 :value)))
       (is (= {} resp3))))
   (testing-print "respects buffer-size option"
@@ -112,9 +116,13 @@
     (let [[resp1 resp2 resp3] (handle {:value          (range 512)
                                        ::print/stream? 1
                                        ::print/print   `custom-printer})]
-      (is (.StartsWith (:value resp1) "<foo (0 1 2 3"))            ;;; .startsWith
+      (is (-> resp1
+              ^String (:value)
+              (.StartsWith "<foo (0 1 2 3")))                                  ;;; .startsWith 
       (is (= {} (dissoc resp1 :value)))
-      (is (.EndsWith (:value resp2) "510 511) ...>"))              ;;; .endsWith
+      (is (-> resp2
+              ^String (:value)
+              (.EndsWith "510 511) ...>")))                                    ;;; .endsWith
       (is (= {} (dissoc resp2 :value)))
       (is (= {} resp3))))
   (testing-print "works with custom printer and print-options"
@@ -122,9 +130,13 @@
                                        ::print/stream? 1
                                        ::print/print   `custom-printer
                                        ::print/options {:sub "bar"}})]
-      (is (.StartsWith (:value resp1) "<foo (0 1 2 3"))            ;;; .startsWith
+      (is (-> resp1
+              ^String (:value)
+              (.StartsWith "<foo (0 1 2 3")))                                  ;;; .startsWith 
       (is (= {} (dissoc resp1 :value)))
-      (is (.EndsWith (:value resp2) "510 511) bar>"))              ;;; .endsWith
+      (is (-> resp2
+              ^String (:value)
+              (.EndsWith "510 511) bar>")))                                    ;;;  .endsWith
       (is (= {} (dissoc resp2 :value)))
       (is (= {} resp3)))))
 
