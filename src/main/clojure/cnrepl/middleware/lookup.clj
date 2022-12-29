@@ -12,7 +12,6 @@
   {:author "Bozhidar Batsov"
    :added "0.8"}
   (:require
-   [clojure.clr.io :as io]                                              ;;; clojure.java.io
    [cnrepl.middleware :as middleware :refer [set-descriptor!]]
    [cnrepl.misc :refer [response-for] :as misc]
    [cnrepl.util.lookup :as lookup]
@@ -33,8 +32,10 @@
           sym (symbol sym)
           lookup-fn (or (and lookup-fn (misc/requiring-resolve (symbol lookup-fn))) *lookup-fn*)]
       (response-for msg {:status :done :info (lookup-fn ns sym)}))
-    (catch Exception e
-      (response-for msg {:status #{:done :lookup-error}}))))
+    (catch Exception _e
+      (if (nil? ns)
+        (response-for msg {:status #{:done :lookup-error :namespace-not-found}})
+        (response-for msg {:status #{:done :lookup-error}})))))
 
 (defn wrap-lookup
   "Middleware that provides symbol info lookup.

@@ -8,8 +8,7 @@
    [clojure.clr.io :as io]                                                              ;;; clojure.java.io
    [cnrepl.middleware :as middleware :refer [set-descriptor!]]
    [cnrepl.misc :refer [response-for]]
-   [cnrepl.transport :as t])
-  (:import cnrepl.transport.Transport))
+   [cnrepl.transport :as t]))
 ;;;;;;;;;;;;;;;;;;  Making this a no-op for now -- no idea what the equivalent would be in CLR ;;;;;;;;;;;;;;;;;;;;;;;;
 ;; TODO: dedup with base64 in elisions branch once both are merged
 (defn base64-encode [^System.IO.Stream in]                                            ;;; ^java.io.InputStream
@@ -43,15 +42,18 @@
     (loop [bits 0 buf 0]
       (let [got (.Read in)]                                                          ;;; .read
         (when-not (or (neg? got) (= 61 got))
-          (let [buf (bit-or (.IndexOf table got) (bit-shift-left buf 6))             ;;; .indexOf
-                bits (+ bits 6)]
-            (if (<= 8 bits)
-              (let [bits (- bits 8)]
-                (.Write bos (bit-shift-right buf bits))                              ;;; .write
-                (recur bits (bit-and 63 buf)))
-              (recur bits buf))))))
-    (.ToArray bos)))                                                             ;;; .toByteArray
-
+          (let [table-idx (.IndexOf table got)]                                      ;;; .indexOf
+            (if (= -1 table-idx)
+              (recur bits buf)
+              (let [buf (bit-or table-idx (bit-shift-left buf 6))
+                    bits (+ bits 6)]
+                (if (<= 8 bits)
+                  (let [bits (- bits 8)]
+                    (.Write bos (bit-shift-right buf bits))                         ;;; .write
+                    (recur bits (bit-and 63 buf)))
+                  (recur bits buf))))))))
+    (.ToArray bos)))                                                                ;;; .toByteArray	
+		
 (defn- sideloader
   "Creates a classloader that obey standard delegating policy."
   [{:keys [session id transport] :as msg} pending]
@@ -86,11 +88,13 @@
     (fn [{:keys [op type name content transport session] :as msg}]
       (case op
         "sideloader-start"
-        (alter-meta! session assoc :classloader
-                     (sideloader msg pending))
+        (alter-meta! session assoc  
+   	                 :classloader (sideloader msg pending)
+                     ::pending pending))
 
-        "sideloader-provide"
-        (if-some [p (@pending [type name])]
+      "sideloader-provide"
+      (let [pending (::pending (meta session))]
+        (if-some [p (and pending (@pending [type name]))]
           (do
             (deliver p (let [bytes (base64-decode content)]
                          (when (pos? (count bytes))
@@ -99,9 +103,9 @@
             (t/send transport (response-for msg {:status :done})))
           (t/send transport (response-for msg {:status #{:done :unexpected-provide}
                                                :type type
-                                               :name name})))
+                                               :name name}))))
 
-        (h msg)))))
+      (h msg))))
 
 (set-descriptor! #'wrap-sideloader
                  {:requires #{"clone"}

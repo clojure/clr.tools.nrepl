@@ -9,9 +9,8 @@
 (ns cnrepl.bencode
   "A netstring and bencode implementation for Clojure."
   {:author "Meikel Brandmeyer"}
-  (:require [clojure.clr.io :as io][cnrepl.debug :as debug])                   ;;; clojure.java.io
-  (:import clojure.lang.RT
-           [System.IO Stream                           ;;; java.io ByteArrayOutputStream
+  (:require [clojure.clr.io :as io])                   ;;; clojure.java.io
+  (:import [System.IO Stream                           ;;; java.io ByteArrayOutputStream
             EndOfStreamException                       ;;; EOFException
             MemoryStream                               ;;; InputStream
             IOException
@@ -83,8 +82,8 @@
 (def colon 58)
 
 (defn #^{:private true} read-byte
-  #^long [#^PushbackInputStream input]  ;;; #^InputStream
-  (let [c (.ReadByte input)]        ;;; .read
+  #^long [#^PushbackInputStream input]                                                      ;;; #^InputStream
+  (let [c (.ReadByte input)]                                                                ;;; .read
     (when (neg? c)
       (throw (EndOfStreamException. "Invalid netstring. Unexpected end of input.")))        ;;; EOFException.
     ;; Here we have a quirk for example. `.read` returns -1 on end of
@@ -97,7 +96,7 @@
     ;;
     ;; So we have to do some translation here. `Byte/byteValue` would
     ;; do that for us, but we want to avoid boxing here.
-    c ))                                                                ;;; not a problem for CLR: (if (< 127 c) (- c 256) c)
+    c ))                                                                                 ;;; not a problem for CLR: (if (< 127 c) (- c 256) c)
 
 (defn #^{:private true :tag |System.Byte[]|} read-bytes                                  ;;; :tag "[B"
   #^Object [#^Stream input n]                                                            ;;; #^InputStream 
@@ -118,7 +117,7 @@
 ;; for byte count prefixes and \e for integers.
 
 (defn #^{:private true} read-long
-  #^long [#^Stream input delim]                                                    ;;; #^InputStream
+  #^long [#^Stream input delim]                                                          ;;; #^InputStream
   (loop [n (long 0)]
     ;; We read repeatedly a byte from the input…
     (let [b (read-byte input)]
@@ -148,22 +147,16 @@
 ;;
 ;; With this in mind we define the inner helper function first.
 
-(declare #^|System.Byte[]| string>payload                                                  ;;;  #^"[B"
+(declare #^|System.Byte[]| string>payload                                                ;;;  #^"[B"
          #^String string<payload)
-
-;(defn #^{:private true} read-netstring*      ;;; DM: Rewriting for debugging
-;  [input]
-;  (read-bytes input (read-long input colon)))
 
 (defn #^{:private true} read-netstring*
   [input]
-  (let [cnt (read-long input colon)
-	    bs (read-bytes input cnt)]
-	bs))
+  (read-bytes input (read-long input colon)))
 
 ;; And the public facing API: `read-netstring`.
 
-(defn #^|System.Byte[]| read-netstring                                                    ;;;  #^"[B"
+(defn #^|System.Byte[]| read-netstring                                                   ;;;  #^"[B"
   "Reads a classic netstring from input—an InputStream. Returns the
   contained binary data as byte array."
   [input]
@@ -182,7 +175,7 @@
 
 (defn #^{:private true :tag String} string<payload
   [#^|System.Byte[]| b]                                                                  ;;; #^"[B"
-  (.GetString System.Text.Encoding/UTF8 b))                                               ;;; (String. b "UTF-8"))
+  (.GetString System.Text.Encoding/UTF8 b))                                              ;;; (String. b "UTF-8"))
 
 ;; ## Writing a netstring
 ;;
@@ -196,20 +189,20 @@
 ;; the entry point itself and a helper function.
 
 (defn #^{:private true} write-netstring*
-  [#^Stream output #^|System.Byte[]| content]                                          ;;; #^OutputStream  #^"[B"
-  (let [ lenbytes (string>payload (str (alength content))) ]                           ;;; added line
+  [#^Stream output #^|System.Byte[]| content]                                            ;;; #^OutputStream  #^"[B"
+  (let [ lenbytes (string>payload (str (alength content))) ]                             ;;; added line
   (doto output
-    (.Write lenbytes 0 (alength lenbytes))                                             ;;; (.write (string>payload (str (alength content))))
-    (.WriteByte (byte colon))                                                          ;;; .write  (int colon)
-    (.Write content 0 (alength content)))) )                                           ;;; (.write content)
+    (.Write lenbytes 0 (alength lenbytes))                                               ;;; (.write (string>payload (str (alength content))))
+    (.WriteByte (byte colon))                                                            ;;; .write  (int colon)
+    (.Write content 0 (alength content)))) )                                             ;;; (.write content)
 
 (defn write-netstring
   "Write the given binary data to the output stream in form of a classic
   netstring."
-  [#^Stream output content]                                                            ;;; #^OutputStream
+  [#^Stream output content]                                                              ;;; #^OutputStream
   (doto output
     (write-netstring* content)
-    (.WriteByte (byte comma))))                                                        ;;; .write (int comma)
+    (.WriteByte (byte comma))))                                                          ;;; .write (int comma)
 
 ;; # Bencode
 ;;
@@ -250,7 +243,7 @@
       (= l ch) :list
       (= d ch) :map
       :else    (do
-                 (.Unread input (byte ch))                                                 ;;; (.unread input (int ch))
+                 (.Unread input (byte ch))                                               ;;; (.unread input (int ch))
                  (read-netstring* input)))))
 
 ;; To read the bencode encoded data we walk a long the sequence of tokens
@@ -321,19 +314,19 @@
   'namespace/name'."
   (fn [_output thing]
     (cond
-      (instance? |System.Byte[]| thing) :bytes                                    ;;; (RT/classForName "[B")
-      (instance? Stream thing) :input-stream                                      ;;; InputStream
+      (instance? |System.Byte[]| thing) :bytes                                           ;;; (RT/classForName "[B")
+      (instance? Stream thing) :input-stream                                             ;;; InputStream
       (integer? thing) :integer
       (string? thing)  :string
       (symbol? thing)  :named
       (keyword? thing) :named
       (map? thing)     :map
-      (or (nil? thing) (coll? thing) (.IsArray (class thing))) :list              ;;; .isArray
+      (or (nil? thing) (coll? thing) (.IsArray (class thing))) :list                     ;;; .isArray
       :else (type thing))))
 
 (defmethod write-bencode :default
   [output x]
-  (throw (ArgumentException. (str "Cannot write value of type " (class x)))))     ;;; IllegalArgumentException.
+  (throw (ArgumentException. (str "Cannot write value of type " (class x)))))            ;;; IllegalArgumentException.
 
 ;; The following methods should be pretty straight-forward.
 ;;
@@ -357,19 +350,19 @@
 
 (defmethod write-bencode :input-stream
   [output stream]
-  (let [bytes (MemoryStream.)]                                     ;;; ByteArrayOutputStream. 
+  (let [bytes (MemoryStream.)]                                        ;;; ByteArrayOutputStream. 
     (io/copy stream bytes)
-    (write-netstring* output (.ToArray bytes))))                   ;;; .toByteArray
+    (write-netstring* output (.ToArray bytes))))                      ;;; .toByteArray
 
 ;; Integers are again the ugly special case.
 
 (defmethod write-bencode :integer
-  [#^Stream output n]                                              ;;; #^OutputStream
+  [#^Stream output n]                                                 ;;; #^OutputStream
   (let [nbytes (string>payload (str n))]
   (doto output
-    (.WriteByte (byte i))                                          ;;; (.write (int i))
-    (.Write nbytes 0 (alength nbytes))                             ;;; (.write (string>payload (str n)))
-    (.WriteByte (byte e))))  )                                     ;;; (.write (int e))
+    (.WriteByte (byte i))                                             ;;; (.write (int i))
+    (.Write nbytes 0 (alength nbytes))                                ;;; (.write (string>payload (str n)))
+    (.WriteByte (byte e))))  )                                        ;;; (.write (int e))
 
 ;; Symbols and keywords are converted to a string of the
 ;; form 'namespace/name' or just 'name' in case its not

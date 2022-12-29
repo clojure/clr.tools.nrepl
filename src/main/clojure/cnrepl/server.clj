@@ -3,7 +3,7 @@
   {:author "Chas Emerick"}
   (:require
    [cnrepl.ack :as ack]
-   [cnrepl.middleware.dynamic-loader :as dynamic-loader]  [cnrepl.debug :as debug]
+   [cnrepl.middleware.dynamic-loader :as dynamic-loader]
    [cnrepl.middleware :as middleware]
    cnrepl.middleware.completion
    cnrepl.middleware.interruptible-eval
@@ -11,13 +11,14 @@
    cnrepl.middleware.lookup
    cnrepl.middleware.session
    cnrepl.middleware.sideloader
-   [cnrepl.misc :refer [log response-for returning]]
+   [cnrepl.misc :refer [log noisy-future response-for returning]]
+                                                                                 ;;; [cnrepl.socket :as socket :refer [inet-socket unix-server-socket]]
+   [cnrepl.tls :as tls]
    [cnrepl.transport :as t])
   (:import
-   [System.Net.Sockets  SocketOptionLevel SocketOptionName  TcpListener
-                        Socket SocketType ProtocolType SocketShutdown]
-   [System.Net IPAddress IPEndPoint]))                                             ;;;[java.net InetSocketAddress ServerSocket]
-
+   [System.Net.Sockets  SocketOptionLevel SocketOptionName  TcpListener Socket SocketType ProtocolType SocketShutdown SocketException]        ;;; (java.net ServerSocket SocketException)
+   [System.Net IPAddress IPEndPoint]))                                                                                        ;;; [java.nio.channels ClosedChannelException]
+ 
 (defn handle*
   [msg handler transport]
   (try
@@ -49,37 +50,44 @@
       (log e "Failed to close " x))))
 
 (defn- accept-connection
-  [{:keys [^TcpListener server-socket open-transports transport greeting handler]          ;;; ^ServerSocket
+  [{:keys [^TcpListener server-socket open-transports transport greeting handler]     ;;; ^ServerSocket
     :as server}]
-  (when (.IsBound (.Server server-socket))                                                     ;;; when-not (.isClosed server-socket)
-    (let [tcp-client(.AcceptTcpClient server-socket)]                                               ;;; .accept
-      (future (let [transport (transport (.Client tcp-client))]
-                (try
-                  (swap! open-transports conj transport)
-                  (when greeting (greeting transport))
-                  (handle handler transport)
-                  (finally
-                    (swap! open-transports disj transport)
-                    (safe-close transport)))))
-      (future (accept-connection server)))))
+  (when-let [sock (try
+                    (.Client (.AcceptTcpClient server-socket))                        ;;; (socket/accept server-socket)
+                    (catch SocketException _                                          ;;; ClosedChannelException
+                      nil))]
+    (noisy-future
+     (let [transport (transport sock)]
+       (try
+         (swap! open-transports conj transport)
+         (when greeting (greeting transport))
+         (handle handler transport)
+         (catch SocketException _
+           nil)
+         (finally
+           (swap! open-transports disj transport)
+           (safe-close transport)))))
+    (noisy-future
+     (try
+       (accept-connection server)
+       (catch SocketException _
+         nil)))))	
 
 (defn stop-server
   "Stops a server started via `start-server`."
-  [{:keys [open-transports ^TcpListener server-socket] :as server}]                        ;;; ^ServerSocket
+  [{:keys [open-transports ^TcpListener server-socket] :as server}]                   ;;; ^ServerSocket
   (returning server
-            (when (.IsBound (.Server server-socket))                                          ;;; DM: ADDED
-	          (.Stop server-socket))
-            (.Stop server-socket)                                                    ;;; .close
-             (swap! open-transports
-                    #(reduce
-                      (fn [s t]
-                        ;; should always be true for the socket server...
-                        (if (instance? IDisposable t)                                 ;;; java.io.Closeable
-                          (do
-                            (safe-close t)
-                            (disj s t))
-                          s))
-                      % %))))
+    (.Stop server-socket)                                                             ;;; .close
+    (swap! open-transports
+           #(reduce
+             (fn [s t]
+               ;; should always be true for the socket server...
+               (if (instance? IDisposable t)                                          ;;; java.io.Closeable
+                 (do
+                   (safe-close t)
+                   (disj s t))
+                 s))
+             % %))))
 
 (defn unknown-op
   "Sends an :unknown-op :error for the given message."
@@ -137,11 +145,19 @@
   IDisposable                                                                                      ;;; java.io.Closeable
   (Dispose [this] (stop-server this)))                                                             ;;; (close [this] (stop-server this))
 
-(defn start-server
+(defn ^Server start-server
   "Starts a socket-based nREPL server.  Configuration options include:
-
+  
    * :port — defaults to 0, which autoselects an open port
    * :bind — bind address, by default \"127.0.0.1\"
+   * :socket — filesystem socket path (alternative to :port and :bind).
+       Note that POSIX does not specify the effect (if any) of the
+       socket file's permissions (and some systems have ignored them),
+       so any access control should be arranged via parent directories.
+   * :tls? - specify `true` to use TLS.
+   * :tls-keys-file - A file that contains the certificates and private key.
+   * :tls-keys-str - A string that contains the certificates and private key.
+     :tls-keys-file or :tls-keys-str must be given if :tls? is true.
    * :handler — the nREPL message handler to use for each incoming connection;
        defaults to the result of `(default-handler)`
    * :transport-fn — a function that, given a java.net.Socket corresponding
@@ -155,56 +171,43 @@
        would provide this greeting upon connecting to the server, but telnet et
        al. isn't that. See `nrepl.transport/tty-greeting` for an example of such
        a function.
-
-   Returns a (record) handle to the server that is started, which may be stopped
+  
+  Returns a (record) handle to the server that is started, which may be stopped
    either via `stop-server`, (.close server), or automatically via `with-open`.
    The port that the server is open on is available in the :port slot of the
-   server map (useful if the :port option is 0 or was left unspecified."
-  [& {:keys [port bind transport-fn handler ack-port greeting-fn]}]
-;;;  (let [port (or port 0)
-;;;                                                                    ;;; addr (fn [^String bind ^Integer port]  (INetSockeAddress. bind port))
-;;;        transport-fn (or transport-fn t/bencode)
-;;;        ;; We fallback to 127.0.0.1 instead of to localhost to avoid
-;;;        ;; a dependency on the order of ipv4 and ipv6 records for
-;;;        ;; localhost in /etc/hosts
-;;;        bind (or bind "127.0.0.1")
-;;;		ipe (IPEndPoint. (IPAddress/Parse bind) port)                                                       ;;; DM:ADDED
-;;;        ss (doto                                                                                 ;;; (ServerSocket.)
-;;;		     (Socket. (.AddressFamily ipe)  SocketType/Stream  ProtocolType/Tcp)                 ;;;  DM:Added
-;;;             (.SetSocketOption SocketOptionLevel/Socket SocketOptionName/ReuseAddress true)      ;;; (.setReuseAddress true)
-;;;             (.Bind ^IPEndPoint ipe))                                                            ;;; (.bind (addr bind port))
-;;;        server (Server. ss
-;;;                          (.Port ^IPEndPoint (.LocalEndPoint ss))                                ;;; (.getLocalPort ss)
-;;;                        (atom #{})
-;;;                        transport-fn
-;;;                        greeting-fn
-;;;                        (or handler (default-handler)))]
-;;;	(debug/prn-thread "Starting server " server) ;DEBUG
-;;;    (future (accept-connection server))
-;;;    (when ack-port
-;;;      (ack/send-ack (:port server) ack-port transport-fn))
-;;;    server))
-
-;;; Let's build on prior success, as in clojure.core.server, and work with a TcpListener instead.
-
-
-  (let [port (or port 0)
-                                                                    ;;; addr (fn [^String bind ^Integer port]  (INetSockeAddress. bind port))
-        transport-fn (or transport-fn t/bencode)
-        ;; We fallback to 127.0.0.1 instead of to localhost to avoid
-        ;; a dependency on the order of ipv4 and ipv6 records for
-        ;; localhost in /etc/hosts
-        bind (or bind "127.0.0.1")		
-		ipe (IPEndPoint. (IPAddress/Parse bind) port)   
-		ss (doto (TcpListener. ipe) (.Start))    ;; we have to start it to pick up the .LocalEndPoint on the server.
+   server map (useful if the :port option is 0 or was left unspecified)."
+  [& {:keys [port bind socket tls? tls-keys-str tls-keys-file transport-fn handler ack-port greeting-fn consume-exception]}]
+  (when (and socket (or port bind tls?))
+    (let [msg "Cannot listen on both port and filesystem socket"]
+      (log msg)
+      (throw (ex-info msg {:nrepl/kind ::invalid-start-request}))))
+  (when (and tls? (not (or tls-keys-str tls-keys-file)))
+    (let [msg "tls? is true, but tls-keys-str nor tls-keys-file is present"]
+      (log msg)
+      (throw (ex-info msg {:nrepl/kind ::invalid-start-request}))))
+  (let [transport-fn (or transport-fn t/bencode)
+        port (or port 0)                                                          ;;; ss (cond socket
+        bind (or bind "127.0.0.1")	                                              ;;;         (unix-server-socket socket)
+        ipe (IPEndPoint. (IPAddress/Parse bind) port)                             ;;;         (or tls? (or tls-keys-str tls-keys-file))
+        ss  (doto (TcpListener. ipe)                                              ;;;         (inet-socket bind port (tls/ssl-context-or-throw tls-keys-str tls-keys-file))
+		       (.Start))  ;; req to pick up the .LocalEndPoint on the server.     ;;;         :else                       
+                                                                                  ;;;         (inet-socket bind port))
         server (Server. ss
-                        (.Port ^IPEndPoint (.LocalEndPoint (.Server ss)))                                ;;; (.getLocalPort ss)
+                        (.Port ^IPEndPoint (.LocalEndPoint (.Server ss)))         ;;; (when-not socket (.getLocalPort ^ServerSocket ss))
                         (atom #{})
                         transport-fn
                         greeting-fn
                         (or handler (default-handler)))]
-    ;;(.Start ss 0)   -- started above                                                                            ;;; DM: ADDED
-    (future (accept-connection server))
+    (noisy-future
+     (try
+       (accept-connection server)
+       (catch Exception t                                                         ;;; Throwable
+         (cond consume-exception
+               (consume-exception t)
+               (instance? SocketException t)
+               nil
+               :else
+               (throw t)))))
     (when ack-port
       (ack/send-ack (:port server) ack-port transport-fn))
-    server))		
+    server))

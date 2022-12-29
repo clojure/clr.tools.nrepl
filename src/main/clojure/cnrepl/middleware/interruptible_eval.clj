@@ -6,7 +6,7 @@
   (:require
    clojure.main
    clojure.test
-   [cnrepl.middleware :refer [set-descriptor!]]  [cnrepl.debug :as debug]
+   [cnrepl.middleware :refer [set-descriptor!]]
    [cnrepl.middleware.caught :as caught]
    [cnrepl.middleware.print :as print]
    [cnrepl.misc :as misc :refer [response-for ]]                       ;;; with-session-classloader -- removed

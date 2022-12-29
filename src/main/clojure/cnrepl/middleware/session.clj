@@ -3,9 +3,9 @@
   {:author "Chas Emerick"}
   (:require
    clojure.main
-   [cnrepl.middleware :refer [set-descriptor!]]  [cnrepl.debug :as debug]
+   [cnrepl.middleware :refer [set-descriptor!]]
    [cnrepl.middleware.interruptible-eval :refer [*msg* evaluate]]
-   [cnrepl.misc :refer [uuid response-for]]
+   [cnrepl.misc :refer [noisy-future uuid response-for]]
    [cnrepl.transport :as t])
   (:import
    (clojure.lang Compiler+CompilerException LineNumberingTextReader)               ;;; Compiler$CompilerException LineNumberingPushbackReader

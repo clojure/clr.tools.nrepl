@@ -10,9 +10,13 @@
    [cnrepl.config :as config]
    [cnrepl.core :as nrepl]
    [cnrepl.ack :refer [send-ack]]
+   [cnrepl.misc :refer [noisy-future]]
    [cnrepl.server :as nrepl-server]
+                                                                               ;;; [nrepl.socket :as socket]
    [cnrepl.transport :as transport]
-   [cnrepl.version :as version]))
+   [cnrepl.version :as version])
+  #_(:import
+   [java.net URI]))
 
 (defn- clean-up-and-exit
   "Performs any necessary clean up and calls `(System/exit status)`."
@@ -26,6 +30,7 @@
   "Requests that the process exit with the given `status`.  Does not
   return."
   [status]
+  ;; :nrepl/kind is our shared (ns independent) ExceptionInfo discriminator
   (throw (ex-info nil {::kind ::exit ::status status})))
 
 (defn die
@@ -35,7 +40,7 @@
     (doseq [m msg] (print m)))
   (exit 2))
 
-#_(defmacro ^{:author "Colin Jones"} set-signal-handler!                  ;;;  Does not make sense for .Net.  We will deal with this in a different way below
+#_(defmacro ^{:author "Colin Jones"} set-signal-handler!                       ;;;  Does not make sense for .Net.  We will deal with this in a different way below
   [signal f]
   (if (try (Class/forName "sun.misc.Signal")
            (catch Throwable _e))
@@ -79,43 +84,62 @@ Interrupt: Control+C
 Exit:      Control+D or (exit) or (quit)"
           (:version-string version/version)
           (clojure-version)
-          (System.Runtime.InteropServices.RuntimeInformation/FrameworkDescription)   ;;; (System/getProperty "java.vm.name") 
-          #_(System/getProperty "java.runtime.version")))                            ;;; Commented out
+          (System.Runtime.InteropServices.RuntimeInformation/FrameworkDescription)          ;;; (System/getProperty "java.vm.name") 
+          #_(System/getProperty "java.runtime.version")))                                   ;;; Commented out
+
+(defn- run-repl-with-transport
+  [transport {:keys [prompt err out value]
+              :or   {prompt #(print (str % "=> "))
+                     err    print
+                     out    print
+                     value  println}}]
+  (let [client (nrepl/client transport Int32/MaxValue)]                                     ;;; Long/MAX_VALUE
+    (println (repl-intro))
+    ;; We take 50ms to listen to any greeting messages, and display the value
+    ;; in the `:out` slot.
+    (noisy-future (->> (client)
+                       (take-while #(nil? (:id %)))
+                       (run! #(when-let [msg (:out %)] (print msg)))))
+    (System.Threading.Thread/Sleep 50)                                                      ;;; Thread/sleep
+    (let [session (nrepl/client-session client)]
+      (swap! running-repl assoc :transport transport)
+      (swap! running-repl assoc :client session)
+      (binding [*ns* *ns*]
+        (loop []
+          (prompt *ns*)
+          (flush)
+          (let [input (read *in* false 'exit)]
+            (if (done? input)
+              (clean-up-and-exit 0)
+              (do (doseq [res (nrepl/message session {:op "eval" :code (pr-str input)})]
+                    (when (:value res) (value (:value res)))
+                    (when (:out res) (out (:out res)))
+                    (when (:err res) (err (:err res)))
+                    (when (:ns res) (set! *ns* (create-ns (symbol (:ns res))))))
+                  (recur)))))))))
 
 (defn- run-repl
+  ([{:keys [server options]}]
+   (let [{:keys [host port socket] :or {host "127.0.0.1"}} server
+         {:keys [transport tls-keys-file tls-keys-str] :or {transport #'transport/bencode}} options]
+     (run-repl-with-transport
+      (cond
+        socket
+        (nrepl/connect :socket socket :transport-fn transport)
+
+        (and host port)
+        (nrepl/connect :host host :port port :transport-fn transport :tls-keys-file tls-keys-file :tls-keys-str tls-keys-str)
+
+        :else
+        (die "Must supply host/port or socket."))
+      options)))
   ([host port]
    (run-repl host port nil))
-  ([host port {:keys [prompt err out value transport]
-               :or {prompt #(print (str % "=> "))
-                    err print
-                    out print
-                    value println
-                    transport #'transport/bencode}}]
-   (let [transport (nrepl/connect :host host :port port :transport-fn transport)
-         client (nrepl/client transport Int64/MaxValue)]                                    ;;; Long/MAX_VALUE
-     (println (repl-intro))
-     ;; We take 50ms to listen to any greeting messages, and display the value
-     ;; in the `:out` slot.
-     (future (->> (client)
-                  (take-while #(nil? (:id %)))
-                  (run! #(when-let [msg (:out %)] (print msg)))))
-     (System.Threading.Thread/Sleep 50)                                                     ;;; Thread/sleep
-     (let [session (nrepl/client-session client)
-           ns (atom "user")]
-       (swap! running-repl assoc :transport transport)
-       (swap! running-repl assoc :client session)
-       (loop []
-         (prompt @ns)
-         (flush)
-         (let [input (read *in* false 'exit)]
-           (if (done? input)
-             (Environment/Exit 0)                                                           ;;; System/exit
-             (do (doseq [res (nrepl/message session {:op "eval" :code (pr-str input)})]
-                   (when (:value res) (value (:value res)))
-                   (when (:out res) (out (:out res)))
-                   (when (:err res) (err (:err res)))
-                   (when (:ns res) (reset! ns (:ns res))))
-                 (recur)))))))))
+  ([host port options]
+   (run-repl {:server  (cond-> {}
+                         host (assoc :host host)
+                         port (assoc :port port))
+              :options options})))
 
 (def #^{:private true} option-shorthands
   {"-i" "--interactive"
@@ -125,6 +149,7 @@ Exit:      Control+D or (exit) or (quit)"
    "-b" "--bind"
    "-h" "--host"
    "-p" "--port"
+   "-s" "--socket"
    "-m" "--middleware"
    "-t" "--transport"
    "-n" "--handler"
@@ -167,13 +192,14 @@ Exit:      Control+D or (exit) or (quit)"
 (defn help
   []
   (str "Usage:
-
+  
   -i/--interactive            Start nREPL and connect to it with the built-in client.
   -c/--connect                Connect to a running nREPL with the built-in client.
   -C/--color                  Use colors to differentiate values from output in the REPL. Must be combined with --interactive.
   -b/--bind ADDR              Bind address, by default \"127.0.0.1\".
   -h/--host ADDR              Host address to connect to when using --connect. Defaults to \"127.0.0.1\".
   -p/--port PORT              Start nREPL on PORT. Defaults to 0 (random port) if not specified.
+  -s/--socket PATH            Start nREPL on filesystem socket at PATH or nREPL to connect to when using --connect.
   --ack ACK-PORT              Acknowledge the port of this server to another nREPL server running on ACK-PORT.
   -n/--handler HANDLER        The nREPL message handler to use for each incoming connection; defaults to the result of `(nrepl.server/default-handler)`.
   -m/--middleware MIDDLEWARE  A sequence of vars, representing middleware you wish to mix in to the nREPL handler.
@@ -213,8 +239,8 @@ Exit:      Control+D or (exit) or (quit)"
     (if (and transport client)
       (doseq [res (nrepl/message client {:op "interrupt"})]
         (when (= ["done" "session-idle"] (:status res))
-          (Environment/Exit 0)))                                     ;;; System/exit
-      (Environment/Exit 0))))                                        ;;; System/exit
+          (Environment/Exit 0)))                                          ;;; System/exit
+      (Environment/Exit 0))))                                             ;;; System/exit
 
 (def ^:private mw-xf
   (comp (map symbol)
@@ -334,21 +360,27 @@ Exit:      Control+D or (exit) or (quit)"
   [options]
   {:port (->int (:port options))
    :host (:host options)
+   :socket (:socket options)
    :transport (options->transport options)
-   :repl-fn (options->repl-fn options)})
+   :repl-fn (options->repl-fn options)
+   :tls-keys-str (:tls-keys-str options)
+   :tls-keys-file (:tls-keys-file options)})
 
 (defn server-opts
   "Takes a map of nREPL CLI options
   Returns map of processed options to start an nREPL server."
   [options]
   (let [middleware (sanitize-middleware-option (:middleware options))
-        {:keys [host port transport]} (connection-opts options)]
+        {:keys [host port socket transport tls-keys-str tls-keys-file]} (connection-opts options)]
     (merge options
            {:host host
             :port port
+            :socket socket
             :transport transport
             :bind (:bind options)
             :middleware middleware
+            :tls-keys-str tls-keys-str
+            :tls-keys-file tls-keys-file
             :handler (options->handler options middleware)
             :greeting (options->greeting options transport)
             :ack-port (options->ack-port options)
@@ -362,20 +394,28 @@ Exit:      Control+D or (exit) or (quit)"
   [server options]
   (let [transport (:transport options)
         repl-fn (:repl-fn options)
+        socket (:socket server)
         host (:host server)
         port (:port server)]
     (when (= transport #'transport/tty)
       (die "The built-in client does not support the tty transport. Consider using `nc` or `telnet`.\n"))
-    (repl-fn host port (merge (when (:color options) colored-output)
-                              {:transport transport}))))
+    (if socket
+      (repl-fn {:server  server
+                :options (merge (when (:color options) colored-output)
+                                {:transport transport})})
+      (repl-fn host port
+               (merge (when (:color options) colored-output)
+                      {:transport transport}
+                      (select-keys options [:tls-keys-str :tls-keys-file]))))))
 
 (defn connect-to-server
   "Connects to a running nREPL server and runs a REPL. Exits program when REPL
   is closed.
   Takes a map of nREPL CLI options."
-  [{:keys [host port _transport] :as options}]
-  (interactive-repl {:host host
-                     :port port}
+  [{:keys [host port socket] :as options}]
+  (interactive-repl {:host   host
+                     :port   port
+                     :socket socket}
                     options)
   (exit 0))
 
@@ -400,10 +440,22 @@ Exit:      Control+D or (exit) or (quit)"
   Takes nREPL server map and processed CLI options map.
   Returns connection header string."
   [server options]
+  ;;;(let [transport (:transport options)
+  ;;;      ^java.net.ServerSocket ssocket (:server-socket server)
+  ;;;      ^URI uri (socket/as-nrepl-uri ssocket (transport/uri-scheme transport))]
+  ;;;  ;; The format here is important, as some tools (e.g. CIDER) parse the string
+  ;;;  ;; to extract from it the host and the port to connect to
+  ;;;  (if-let [host (.getHost uri)]
+  ;;;    (format "nREPL server started on port %d on host %s - %s"
+  ;;;            (.getPort uri) host uri)
+  ;;;    (str "nREPL server started on socket " (.toASCIIString uri))))
+  
+  ;;; Too many differences, this came from an older version, with some adjustments.
+
   (let [transport (:transport options)
         port (:port server)
-        ^System.Net.Sockets.Socket ssocket (:server-socket server)                                         ;;; ^java.net.ServerSocket
-        host (.HostName (.GetHostEntry (.Address ^System.Net.IPEndPoint (.GetLocalEndpoint ssocket))))]      ;;; (.getHostName (.getInetAddress ssocket)
+        ^System.Net.Sockets.Socket ssocket (:server-socket server)
+        host (.HostName (.GetHostEntry (.Address ^System.Net.IPEndPoint (.GetLocalEndpoint ssocket))))]
     ;; The format here is important, as some tools (e.g. CIDER) parse the string
     ;; to extract from it the host and the port to connect to
     (format "nREPL server started on port %d on host %s - %s://%s:%d"
@@ -418,20 +470,23 @@ Exit:      Control+D or (exit) or (quit)"
   ;; Many clients look for this file to infer the port to connect to
   (let [port (:port server)
         port-file (System.IO.FileInfo. ".nrepl-port")]                                             ;;; io/file
-    #_(.deleteOnExit port-file)                                                 ;;; commented out -- no easy equivalent
+    #_(.deleteOnExit port-file)                                                                    ;;; commented out -- no easy equivalent
     (spit port-file port)))
 
 (defn start-server
   "Creates an nREPL server instance.
   Takes map of CLI options.
   Returns nREPL server map."
-  [{:keys [port bind handler transport greeting]}]
+  [{:keys [port bind socket handler transport greeting tls-keys-str tls-keys-file]}]
   (nrepl-server/start-server
    :port port
    :bind bind
+   :socket socket
    :handler handler
    :transport-fn transport
-   :greeting-fn greeting))
+   :greeting-fn greeting
+   :tls-keys-str tls-keys-str
+   :tls-keys-file tls-keys-file))
 
 (defn dispatch-commands
   "Look at options to dispatch a specified command.
@@ -458,7 +513,13 @@ Exit:      Control+D or (exit) or (quit)"
     (let [[options _args] (args->cli-options args)]
       (dispatch-commands options))
     (catch clojure.lang.ExceptionInfo ex
-      (let [{:keys [::kind ::status]} (ex-data ex)]
-        (when (= kind ::exit)
-          (clean-up-and-exit status))
-        (throw ex)))))
+      (let [{:keys [:nrepl/kind ::status]} (ex-data ex)]
+        (case kind
+          ::exit (clean-up-and-exit status)
+          (:nrepl.server/no-filesystem-sockets
+           :nrepl.server/invalid-start-request)
+          (do
+            (binding [*out* *err*]
+              (println (.getMessage ex)))
+            (clean-up-and-exit 2))
+          (throw ex))))))

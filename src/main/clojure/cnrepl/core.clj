@@ -3,12 +3,11 @@
   {:author "Chas Emerick"}
   (:require
    clojure.set
-   [cnrepl.misc :refer [uuid]] [cnrepl.debug :as debug]
+   [cnrepl.misc :refer [uuid]]
+   [cnrepl.tls :as tls]
    [cnrepl.transport :as transport]
-   [cnrepl.version :as version])
-  (:import
-   clojure.lang.LineNumberingTextReader                                ;;; LineNumberingPushbackReader
-   [System.IO TextReader] ))                                           ;;; [java.io Reader StringReader Writer PrintWriter]
+   [cnrepl.version :as version]
+   [cnrepl.socket :as socket]))
    
 (defn response-seq
   "Returns a lazy seq of messages received via the given Transport.
@@ -64,6 +63,14 @@
     (concat head (take 1 tail))))
 
 (defn- delimited-transport-seq
+  "Returns a function of one arument that performs described below.
+   The following \"message\" is the argument of the function returned by this function.
+   
+    - Merge delimited-slots to the message
+    - Sends a message via client
+    - Filter only items related to the delimited-slots of client's response seq
+    - Returns head of the seq that will terminate
+      upon receipt of a :status, when :status is an element of termination-statuses"
   [client termination-statuses delimited-slots]  
   (with-meta
     (comp (partial take-until (comp #(seq (clojure.set/intersection % termination-statuses))
@@ -78,13 +85,14 @@
         (update-in [::taking-until] merge delimited-slots))))
 
 (defn message
-  "Sends a message via [client] with a fixed message :id added to it.
+  "Sends a message via [client] with a fixed message :id added to it
+   by `delimited-transport-seq`.
    Returns the head of the client's response seq, filtered to include only
    messages related to the message :id that will terminate upon receipt of a
    \"done\" :status."
   [client {:keys [id] :as msg :or {id (uuid)}}]
   (let [f (delimited-transport-seq client #{"done" :done} {:id id})]
-    (f (assoc msg :id id))))
+    (f msg)))
 
 (defn new-session
   "Provokes the creation and retention of a new session, optionally as a clone
@@ -165,18 +173,35 @@
        combine-responses
        :value))
 
+(defn- tls-connect
+  [{:keys [port host transport-fn tls-keys-str tls-keys-file]}]
+  (throw (NotImplementedException. "TLS connections not yet implemented. ")))          ;;; (let [tls-context (tls/ssl-context-or-throw tls-keys-str tls-keys-file)]
+                                                                                       ;;;   (transport-fn (tls/socket tls-context ^String host (int port) 10000)))
+	
 (defn connect
   "Connects to a socket-based REPL at the given host (defaults to 127.0.0.1) and port,
-   returning the Transport (by default `nrepl.transport/bencode`)
+   or using the supplied socket, returning the Transport (by default `nrepl.transport/bencode`)
    for that connection.
 
    Transports are most easily used with `client`, `client-session`, and
    `message`, depending on the semantics desired."
-  [& {:keys [port host transport-fn] :or {transport-fn transport/bencode
-                                          host "127.0.0.1"}}]
-  {:pre [transport-fn port]}
-  (transport-fn (.Client (System.Net.Sockets.TcpClient. ^String host (int port)))))    ;;; java.net.Socket. \
-  
+  [& {:keys [port host socket transport-fn tls-keys-str tls-keys-file]
+      :or   {transport-fn transport/bencode
+             host         "127.0.0.1"}
+      :as   opts}]
+  {:pre [transport-fn]}
+  (cond
+    socket
+    (throw (NotImplementedException. "unix sockets not yet implemented"))                          ;;; (transport-fn (socket/unix-client-socket socket))
+
+    (or tls-keys-str tls-keys-file)
+    (throw (NotImplementedException. "TLS connections not yet implemented"))                       ;;; (tls-connect (assoc opts :transport-fn transport-fn :host host))
+
+    (and host port)
+    (transport-fn (.Client (System.Net.Sockets.TcpClient. ^String host (int port))))               ;;; (transport-fn (java.net.Socket. ^String host (int port)))
+
+    :else
+    (throw (ArgumentException. "A host plus port or a socket must be supplied to connect."))))     ;;; IllegalArgumentException.  
   
 (defn- ^System.Uri to-uri                                                              ;;; ^java.net.URI
   [x]

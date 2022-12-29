@@ -4,18 +4,23 @@
   (:require
    [clojure.clr.io :as io]                                                           ;;; clojure.java.io
    [clojure.walk :as walk]
-   [cnrepl.bencode :as bencode][cnrepl.debug :as debug]
+   [cnrepl.bencode :as bencode]
+   [cnrepl.socket :as socket]
    [clojure.edn :as edn]
-   [cnrepl.misc :refer [uuid]]
+   [cnrepl.misc :refer [noisy-future uuid]]
    [cnrepl.sync-channel :as sc]                                                      ;;; DM: Added this 
    cnrepl.version)
   (:import
    clojure.lang.RT
-   [System.IO Stream EndOfStreamException MemoryStream]                              ;;; [java.io ByteArrayOutputStream
-   [clojure.lang PushbackInputStream PushbackTextReader]                             ;;; EOFException PushbackInputStream PushbackReader OutputStream]
-   (System.Net.Sockets Socket SocketException SocketShutdown)                       ;;; [java.net Socket SocketException]
-   [System.Collections.Concurrent |BlockingCollection`1[System.Object]|]))           ;;; [java.util.concurrent BlockingQueue LinkedBlockingQueue SynchronousQueue TimeUnit]))
-
+   (System.IO MemoryStream                                                           ;;; java.io ByteArrayOutputStream
+              Stream                                                                 ;;;         Closeable
+              EndOfStreamException)                                                  ;;;         EOFException
+                                                                                     ;;;         Flushable
+   (clojure.lang PushbackInputStream                                                ;;;         PushbackInputStream
+                 PushbackTextReader)                                                 ;;;         PushbackReader
+   [System.Net.Sockets Socket SocketException SocketShutdown]                       ;;; [java.net Socket SocketException]
+   [System.Collections.Concurrent |BlockingCollection`1[System.Object]|]))          ;;; [java.util.concurrent BlockingQueue LinkedBlockingQueue SynchronousQueue TimeUnit]
+   
 (defprotocol Transport
   "Defines the interface for a wire protocol implementation for use
    with nREPL."
@@ -38,22 +43,26 @@
    to the 2 or 3 functions provided."
   ([transport-read write] (fn-transport transport-read write nil))
   ([transport-read write close]
-   (let [read-queue (sc/make-simple-sync-channel)                                   ;;; (SynchronousQueue.)
-         msg-pump (future (try
-                            (while true
-                              (sc/put read-queue (transport-read)))                 ;;; .put
-                            (catch Exception t                                      ;;; Throwable
-                              (sc/put read-queue t))))]                             ;;; .put
+   (let [read-queue (sc/make-simple-sync-channel)                                 ;;; (SynchronousQueue.)
+         msg-pump (noisy-future 
+		           (try
+				     (try 
+                       (while true
+                          (sc/put read-queue (transport-read)))                   ;;; .put
+                       (catch Exception t                                         ;;; Throwable
+                              (sc/put read-queue t)))                             ;;; .put
+				      (catch System.Threading.ThreadInterruptedException _        ;;; InterruptedException
+					    nil)))]
      (FnTransport.
       (let [failure (atom nil)]
         #(if @failure
            (throw @failure)
-           (let [msg (sc/poll read-queue % )]                                       ;;; .poll, remove TimeUnit/MILLISECONDS
-             (if (instance? Exception msg)                                          ;;; Throwable
+           (let [msg (sc/poll read-queue % )]                                     ;;; .poll, remove TimeUnit/MILLISECONDS
+             (if (instance? Exception msg)                                        ;;; Throwable
                (do (reset! failure msg) (throw msg))
                msg))))
       write
-      (fn [] (when close (close)) (future-cancel msg-pump))))))                    ;;; added the when condition.  Looks like close could be nil.
+      (fn [] (when close (close)) (future-cancel msg-pump))))))                   ;;; added the when condition.  Looks like close could be nil.
 
 (defmulti #^{:private true} <bytes class)
 
@@ -81,16 +90,16 @@
   [^Socket s & body]
   `(try
      ~@body
-     #_(catch RuntimeException e#                                              ;;; I'm not sure what is covered here
-       (if (= "EOF while reading" (.Message e#))                            ;;; .getMessage
+     #_(catch RuntimeException e#                                                                                     ;;; I'm not sure what is covered here
+       (if (= "EOF while reading" (.Message e#))                                                                      ;;; .getMessage
          (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server"))
          (throw e#)))
-     (catch EndOfStreamException e#                                             ;;; EOFException
-       (if (= "Invalid netstring. Unexpected end of input." (.Message e#))      ;;; .getMessage 
+     (catch EndOfStreamException e#                                                                                   ;;; EOFException
+       (if (= "Invalid netstring. Unexpected end of input." (.Message e#))                                            ;;; .getMessage 
          (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server"))
          (throw e#)))
-     (catch Exception e#                                                        ;;; Throwable
-       (if (and ~s (not (.Connected ~s)))                                       ;;; .isConnected
+     (catch Exception e#                                                                                              ;;; Throwable
+       (if (and ~s (not (.Connected ~s)))                                                                             ;;; .isConnected
          (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server"))
          (throw e#)))))
 
@@ -101,10 +110,10 @@
 
    This will still throw an exception if called with something unencodable."
   [output thing]
-  (let [buffer (MemoryStream.)]                                           ;;; ByteArrayOutputStream
+  (let [buffer (MemoryStream.)]                                                                 ;;; ByteArrayOutputStream
     (try
      (bencode/write-bencode buffer thing))
-     (.Write ^Stream output (.ToArray buffer) (int 0) (int (.Length buffer)))))                 ;;; .write .toByteArray  ^OutputStream  -- adding the start/count arguments -- else we get the one-arg version that takes a span
+     (.Write ^Stream output (.ToArray buffer) (int 0) (int (.Length buffer)))))                 ;;; .(socket/write output (.toByteArray buffer))  -- adding the start/count arguments -- else we get the one-arg version that takes a span
 
 ;;; DM added
 (defn try-socket-shutdown [^Socket s]
@@ -118,7 +127,7 @@
   ([^Socket s] (bencode s s s))
   ([in out & [^Socket s]]
    (let [in (PushbackInputStream. (io/input-stream in))
-         out (io/output-stream out)]
+         out (io/output-stream out)]                                                    ;;;  (socket/buffered-output out)
      (fn-transport
       #(let [payload (rethrow-on-disconnection s (bencode/read-bencode in))
              unencoded (<bytes (payload "-unencoded"))
@@ -128,15 +137,14 @@
                                       (<bytes to-decode))))
       #(rethrow-on-disconnection s
                                  (locking out
-                                   (doto out
-                                     (safe-write-bencode %)
-                                     .Flush)))                            ;;; .flush
+                                   (safe-write-bencode out %)
+                                   (.Flush out)))                                       ;;; .flush
       (fn []
         (if s
-          (do (try-socket-shutdown s) (.Close s))                                                      ;;; .close  -- added .Shutdown -- recommended before Close for sockets.
+          (do (try-socket-shutdown s) (.Close s))                                       ;;; .close  -- added shutdown -- recommended before Close for sockets.
           (do
-            (.Close in)                                                   ;;; .close
-            (.Close out))))))))                                           ;;; .close
+            (.Close in)                                                                 ;;; .close
+            (.Close out))))))))                                                         ;;; .close
 
 (defn edn
   "Returns a Transport implementation that serializes messages
@@ -161,7 +169,7 @@
                                        (.Flush)))))                        ;;; .flush
       (fn []
         (if s
-          (do (try-socket-shutdown s) (.Close s))                ;;; .close -- Added .Shutdown, recommended before Close for sockets.
+          (do (try-socket-shutdown s) (.Close s))                          ;;; .close -- Added shutdown, recommended before Close for sockets.
           (do
             (.Close in)                                                    ;;; .close
             (.Close out))))))))                                            ;;; .close
@@ -171,14 +179,14 @@
    via simple in/out readers, as with a tty or telnet connection."
   ([^Socket s] (tty s s s))
   ([in out & [^Socket s]]
-    (let [r (PushbackTextReader. (io/text-reader in))                     ;;; PushbackReader. io/reader
-          w (io/text-writer out)                                          ;;; io/writer
+    (let [r (PushbackTextReader. (io/text-reader in))                                      ;;; PushbackReader. io/reader
+          w (io/text-writer out)                                                           ;;; io/writer
          cns (atom "user")
          prompt (fn [newline?]
-                   (when newline? (.Write w (int \newline)))              ;;; .write
-                   (.Write w (str @cns "=> ")))                           ;;; .write
+                   (when newline? (.Write w (int \newline)))                               ;;; .write
+                   (.Write w (str @cns "=> ")))                                            ;;; .write
          session-id (atom nil)
-         read-msg #(let [code (read r)]
+         read-msg #(let [code (read {:read-cond :allow} r)]
                      (merge {:op "eval" :code [code] :ns @cns :id (str "eval" (uuid))}
                             (when @session-id {:session @session-id})))
          read-seq (atom (cons {:op "clone"} (repeatedly read-msg)))
@@ -186,10 +194,10 @@
                  (when new-session (reset! session-id new-session))
                  (when ns (reset! cns ns))
                  (doseq [^String x [out err value] :when x]
-                    (.Write w x))                                                    ;;; .write
-                 (when (and (= status #{:done}) id (.StartsWith ^String id "eval"))  ;;; .startsWith
+                    (.Write w x))                                                          ;;; .write
+                 (when (and (= status #{:done}) id (.StartsWith ^String id "eval"))        ;;; .startsWith
                    (prompt true))
-                  (.Flush w))                                                        ;;; .flush
+                  (.Flush w))                                                              ;;; .flush
          read #(let [head (promise)]
                  (swap! read-seq (fn [s]
                                    (deliver head (first s))
@@ -198,7 +206,7 @@
      (fn-transport read write
                    (when s
                      (swap! read-seq (partial cons {:session @session-id :op "close"}))
-                     #(.Close s))))))                                                ;;; .close
+                     #(.Close s))))))                                                      ;;; .close
 
 (defn tty-greeting
   "A greeting fn usable with `nrepl.server/start-server`,

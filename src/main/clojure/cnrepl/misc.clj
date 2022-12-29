@@ -3,8 +3,7 @@
   useful for anyone extending it)."
   {:author "Chas Emerick"}
   (:refer-clojure :exclude [requiring-resolve])
-  (:require [clojure.clr.io :as io]                        ;;; clojure.java.io
-            [clojure.string :as str]))
+  (:require [clojure.clr.io :as io]))
 	
 (defn log
   [ex & msgs]
@@ -14,9 +13,20 @@
       (apply println "ERROR:" msgs)
       (when ex (println (.StackTrace ^Exception ex))))))   ;;; (.printStackTrace ^Throwable ex)
 	  
-
+(defmacro noisy-future
+  "Executes body in a future, logging any exceptions that make it to the
+  top level."
+  [& body]
+  `(future
+     (try
+       ~@body
+       (catch Exception ex#                                ;;; Throwable
+         (log ex#)
+         (throw ex#)))))
+		 
 (defmacro returning
   "Executes `body`, returning `x`."
+  {:style/indent 1}
   [x & body]
   `(let [x# ~x] ~@body x#))
 
@@ -57,12 +67,14 @@
   "Resolves namespace-qualified sym per 'resolve'. If initial resolve fails,
   attempts to require sym's namespace and retries. Returns nil if sym could not
   be resolved."
-  [sym]
+  [sym & [log?]]
   (or (resolve sym)
       (try
         (require (symbol (namespace sym)))
         (resolve sym)
-        (catch Exception _))))
+        (catch Exception e
+          (when log?
+            (log e))))))
 
 (defmacro with-session-classloader                                        ;;; for now, definitely a no-op
   "This macro does two things:
@@ -74,16 +86,20 @@
       might also be the sideloader. This is required to get hotloading with
       pomegranate working under certain conditions."
   [session & body]
-  `(let [                                                                     ;;; ctxcl#  (.getContextClassLoader (Thread/currentThread))
-                                                                              ;;; alt-cl# (when-let [classloader# (:classloader (meta ~session))]
+  `(let [ctxcl# nil                                                           ;;; ctxcl#  (.getContextClassLoader (Thread/currentThread))
+                                                                              ;;; alt-cl# (when-let [classloader# (:classloader (meta ~session))
                                                                               ;;;               (classloader#))
-         ]                                                                    ;;; cl#     (or alt-cl# ctxcl#)
-                                                                              ;;; (.setContextClassLoader (Thread/currentThread) cl#)
-     (try
+        cl# nil ]                                                                    ;;; cl#     (or alt-cl# ctxcl#)
+     (if (= ctxcl# cl#)
        (with-bindings {}                                                      ;;; clojure.lang.Compiler/LOADER cl#
          ~@body)
-       (finally
-         ))))                                                                  ;;; (.setContextClassLoader (Thread/currentThread) ctxcl#)
+       (do
+                                                                              ;;; (.setContextClassLoader (Thread/currentThread) cl#)
+         (try
+           (with-bindings {}                                                  ;;; clojure.lang.Compiler/LOADER cl#
+             ~@body)
+           (finally
+         ))))))                                                                  ;;; (.setContextClassLoader (Thread/currentThread) ctxcl#)
 
 (defn java-8?                                                               ;;; definitely a no-oop.
   "Util to check if we are using Java 8. Useful for features that behave
@@ -100,6 +116,19 @@
   [:ns :name :doc :file :arglists :forms :macro :special-form
    :protocol :line :column :added :deprecated :resource])
 
+(defn- handle-file-meta
+  "Convert :file metadata to string.
+  Typically `value` would be a string, a File or an URL."
+  [value]
+  (when value
+    (str (if (string? value)
+           ;; try to convert relative file paths like "clojure/core.clj"
+           ;; to absolute file paths
+           (or #_(io/resource value) value)                                   ;;; we don't have io/resource -- what is the equiv?
+           ;; If :file is a File or URL object we just return it as is
+           ;; and convert it to string
+           value))))
+
 (defn sanitize-meta
   "Sanitize a Clojure metadata map such that it can be bencoded."
   [m]
@@ -108,7 +137,7 @@
       (update :ns str)
       (update :name str)
       (update :protocol str)
-      #_(update :file #(or (some-> % io/resource str) %))                  ;;; not sure what the equivalent would be
+      (update :file handle-file-meta)
       (cond-> (:macro m) (update :macro str))
       (cond-> (:special-form m) (update :special-form str))
       (assoc :arglists-str (str (:arglists m)))
