@@ -104,7 +104,7 @@
    #'cnrepl.middleware.lookup/wrap-lookup
    #'cnrepl.middleware.session/add-stdin
    #'cnrepl.middleware.session/session
-   #'cnrepl.middleware.sideloader/wrap-sideloader
+   #_#'cnrepl.middleware.sideloader/wrap-sideloader                  ;;; Kill this for now until we figure out what it should do.
    #'cnrepl.middleware.dynamic-loader/wrap-dynamic-loader])
 
 (def built-in-ops
