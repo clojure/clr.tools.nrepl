@@ -33,7 +33,7 @@
   [m]
   (into {} (filter (fn [[_ v]] (or (number? v) (string? v))) m)))
 
-(defn- java-version
+(defn- clr-version                                                                        ;;; java-version
   []
   (let [version-string (.ToString Environment/Version)                                    ;;; (System/getProperty "java.version")
         version-seq (re-seq #"\d+" version-string)
@@ -63,7 +63,7 @@
                                                      :versions {:nrepl (safe-version version/version)
                                                                 :clojure (safe-version
                                                                           (assoc *clojure-version* :version-string (clojure-version)))
-                                                                :java (safe-version (java-version))}
+                                                                :java (safe-version (clr-version))}                                      ;;; java-version
                                                      :status :done})))
       (h msg))))
 

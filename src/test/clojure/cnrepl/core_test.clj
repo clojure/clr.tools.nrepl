@@ -15,7 +15,7 @@
                                  response-seq
                                  response-values
                                  url-connect]]
-   [cnrepl.ack :as ack] [cnrepl.debug :as debug]
+   [cnrepl.ack :as ack]
    [cnrepl.middleware.caught :as middleware.caught]
    [cnrepl.middleware.print :as middleware.print]
    [cnrepl.middleware.session :as session]
@@ -86,8 +86,8 @@
        (let [~'transport transport#
              ~'client (client transport# Int32/MaxValue)                          ;;; Long/MAX_VALUE
 			 ~'session (client-session ~'client)
-             ;;~'timeout-client (client transport# 1000)
-             ;;~'timeout-session (client-session ~'timeout-client)
+             ~'timeout-client (client transport# 1000)
+             ~'timeout-session (client-session ~'timeout-client)
              ~'repl-eval #(message % {:op "eval" :code %2})
              ~'repl-values (comp response-values ~'repl-eval)]
          ~@body))))

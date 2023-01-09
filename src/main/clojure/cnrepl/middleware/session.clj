@@ -98,7 +98,7 @@
    * ack, another Runnable, ran to notify of successful execution of thunk.
    The thunk/ack split is meaningful for interruptible eval: only the thunk can be interrupted."
   [id thunk ack]
-  (let [wc (gen-delegate System.Threading.WaitCallback [_] (do (.invoke thunk) (.invoke ack)))]
+  (let [wc (gen-delegate System.Threading.WaitCallback [_] (.invoke thunk) (.invoke ack))]
     (System.Threading.ThreadPool/QueueUserWorkItem wc)))
   
   
@@ -200,7 +200,7 @@
     (Thread/Sleep 5000)                                 ;;; sleep
     (when-not (= ThreadState/Stopped                    ;;; (Thread$State/TERMINATED)
                  (.ThreadState t))                      ;;; .getState
-      (.Suspend t))))                                   ;;;  .stop Normally, would call abort, but that is not supported in .Net 5. 
+      (.Interrupt t))))                                 ;;;  .stop Normally, would call abort, but that is not supported in .Net Core and later.
 
 (defn session-exec
   "Takes a session id and returns a maps of three functions meant for interruptible-eval:
@@ -219,14 +219,14 @@
         thread (atom nil)
         main-loop #(try
                      (loop []
-                       (let [[exec-id System.Threading.WaitCallback r System.Threading.WaitCallback ack] (.Take queue)]        ;;; ^Runnable ^Runnable  .take
+                       (let [[exec-id r ack] (.Take queue)]        ;;; ^Runnable ^Runnable  .take
                          (reset! running exec-id)
                          (when (try
-                                 (System.Threading.ThreadPool/QueueUserWorkItem r)                                           ;;; (.run r)
+                                 (System.Threading.ThreadPool/QueueUserWorkItem (gen-delegate System.Threading.WaitCallback [_] (r)))                                           ;;; (.run r)  + gen-delegate
                                  (compare-and-set! running exec-id nil)
                                  (finally
                                    (compare-and-set! running exec-id nil)))
-                           (some-> ack System.Threading.ThreadPool/QueueUserWorkItem)                                        ;;; .run
+                           (some-> (gen-delegate System.Threading.WaitCallback [_] ack) System.Threading.ThreadPool/QueueUserWorkItem)                                        ;;; .run + gen-delegate
                            (recur))))
                      (catch ThreadInterruptedException e))
         spawn-thread #(doto (Thread. (gen-delegate ThreadStart [] (main-loop)))                        ;;; (Thread. main-loop (str "nREPL-session-" id))

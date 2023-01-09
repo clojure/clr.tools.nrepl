@@ -44,3 +44,6 @@
               (map #(try (Int32/Parse %) (catch Exception e nil)))    ;;; Integer/parseInt
               (zipmap [:major :minor :incremental :qualifier]))
          :version-string version-string))
+		 
+		 
+;;; IF WE WANT THIS TO WORK, WE'LL HAVE TO HAND-CODE IT!!

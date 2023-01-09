@@ -6,7 +6,7 @@
   (:refer-clojure :exclude [print])
   (:require
    [cnrepl.middleware :refer [set-descriptor!]]
-   [cnrepl.misc :as misc] [cnrepl.debug :as debug]
+   [cnrepl.misc :as misc]
    [cnrepl.transport :as transport])
   (:import
    (System.IO TextWriter StringWriter StreamWriter BufferedStream)         ;;; (java.io BufferedWriter PrintWriter StringWriter Writer)

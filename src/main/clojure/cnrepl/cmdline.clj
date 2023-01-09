@@ -513,11 +513,11 @@ Exit:      Control+D or (exit) or (quit)"
     (let [[options _args] (args->cli-options args)]
       (dispatch-commands options))
     (catch clojure.lang.ExceptionInfo ex
-      (let [{:keys [:nrepl/kind ::status]} (ex-data ex)]
+      (let [{:keys [:cnrepl/kind ::status]} (ex-data ex)]
         (case kind
           ::exit (clean-up-and-exit status)
-          (:nrepl.server/no-filesystem-sockets
-           :nrepl.server/invalid-start-request)
+          (:cnrepl.server/no-filesystem-sockets
+           :cnrepl.server/invalid-start-request)
           (do
             (binding [*out* *err*]
               (println (.getMessage ex)))

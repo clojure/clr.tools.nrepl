@@ -110,7 +110,7 @@
 (def built-in-ops
   "Get all the op names from default middleware automatically"
   (->> default-middleware
-       (map #(-> % meta :nrepl.middleware/descriptor :handles keys))
+       (map #(-> % meta :cnrepl.middleware/descriptor :handles keys)) 
        (reduce concat)
        set))
 
@@ -180,11 +180,11 @@
   (when (and socket (or port bind tls?))
     (let [msg "Cannot listen on both port and filesystem socket"]
       (log msg)
-      (throw (ex-info msg {:nrepl/kind ::invalid-start-request}))))
+      (throw (ex-info msg {:cnrepl/kind ::invalid-start-request}))))
   (when (and tls? (not (or tls-keys-str tls-keys-file)))
     (let [msg "tls? is true, but tls-keys-str nor tls-keys-file is present"]
       (log msg)
-      (throw (ex-info msg {:nrepl/kind ::invalid-start-request}))))
+      (throw (ex-info msg {:cnrepl/kind ::invalid-start-request}))))
   (let [transport-fn (or transport-fn t/bencode)
         port (or port 0)                                                          ;;; ss (cond socket
         bind (or bind "127.0.0.1")	                                              ;;;         (unix-server-socket socket)

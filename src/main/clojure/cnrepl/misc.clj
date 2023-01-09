@@ -21,7 +21,7 @@
      (try
        ~@body
        (catch Exception ex#                                ;;; Throwable
-         (log ex#)
+         #_(log ex#)
          (throw ex#)))))
 		 
 (defmacro returning

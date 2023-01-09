@@ -194,7 +194,7 @@
   (cond
     (and (some? tls-keys-file) (not (.exists (io/file tls-keys-file))))
     (throw (ex-info (str ":tls-keys-file specified as " tls-keys-file " , but was not found.")
-                    {:nrepl/kind :nrepl.server/invalid-start-request}))
+                    {:cnrepl/kind :cnrepl.server/invalid-start-request}))
 
     (and (some? tls-keys-file) (.exists (io/file tls-keys-file)))
     (try
@@ -202,7 +202,7 @@
       (catch Exception e
         (throw (ex-info (str "Could not create TLS Context from file " tls-keys-file
                              " . Error message: " (.getMessage e))
-                        {:nrepl/kind :nrepl.server/invalid-start-request}))))
+                        {:cnrepl/kind :cnrepl.server/invalid-start-request}))))
 
     (string? tls-keys-str)
     (try
@@ -210,11 +210,11 @@
       (catch Exception e
         (throw (ex-info (str "Could not create TLS Context from string. "
                              "Error message: " (.getMessage e))
-                        {:nrepl/kind :nrepl.server/invalid-start-request}))))
+                        {:cnrepl/kind :cnrepl.server/invalid-start-request}))))
 
     :else
     (throw (ex-info (str "Could not create TLS Context. Neither :tls-keys-str nor :tls-keys-file given.")
-                    {:nrepl/kind :nrepl.server/invalid-start-request}))))
+                    {:cnrepl/kind :cnrepl.server/invalid-start-request}))))
 
 #_(def enabled-protocols
   "An array of protocols we support."

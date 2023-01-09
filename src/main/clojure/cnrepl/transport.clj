@@ -2,7 +2,7 @@
   {:author "Chas Emerick"}
   (:refer-clojure :exclude [send])
   (:require
-   [clojure.clr.io :as io]                                                           ;;; clojure.java.io
+   [clojure.clr.io :as io]                                                        ;;; clojure.java.io
    [clojure.walk :as walk]
    [cnrepl.bencode :as bencode]
    [cnrepl.socket :as socket]
@@ -95,11 +95,11 @@
        (if (= "EOF while reading" (.Message e#))                                                                      ;;; .getMessage
          (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server"))
          (throw e#)))
-     (catch EndOfStreamException e#                                                                                   ;;; EOFException
+     #_(catch EndOfStreamException e#                                                                                   ;;; EOFException
        (if (= "Invalid netstring. Unexpected end of input." (.Message e#))                                            ;;; .getMessage 
          (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server"))
          (throw e#)))
-     (catch Exception e#                                                                                              ;;; Throwable
+     #_(catch Exception e#                                                                                              ;;; Throwable
        (if (and ~s (not (.Connected ~s)))                                                                             ;;; .isConnected
          (throw (SocketException. "The transport's socket appears to have lost its connection to the nREPL server"))
          (throw e#)))))
