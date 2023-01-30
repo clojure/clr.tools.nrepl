@@ -1,7 +1,7 @@
 (ns cnrepl.middleware.load-file
   {:author "Chas Emerick"}
   (:require
-   [cnrepl.middleware :as middleware :refer [set-descriptor!]]
+   [cnrepl.middleware :as middleware :refer [set-descriptor!]]  [cnrepl.debug :as debug]
    [cnrepl.middleware.caught :as caught]
    [cnrepl.middleware.interruptible-eval :as eval]
    [cnrepl.middleware.print :as print])
@@ -25,6 +25,7 @@ be loaded."} file-contents (atom {}))
    loading files of any size will work when the nREPL server is running
    remotely or locally."
   [file file-path file-name]
+    #_(debug/prn-thread (str "load-large-file-code: " file-path ", " file-name ", " file))
   ;; mini TTL impl so that any code orphaned by errors that occur
   ;; between here and the evaluation of the Compiler/load expression
   ;; below are cleaned up on subsequent loads
@@ -46,7 +47,8 @@ be loaded."} file-contents (atom {}))
                  (clojure.lang.Compiler/load
                   (System.IO.StringReader. (@@(var file-contents) '~file-key))                 ;;; java.io.StringReader.
                   ~file-path
-                  ~file-name)
+                  ~file-name
+				  ~file-name)
                  (finally
                    (swap! @(var file-contents) dissoc '~file-key)))))))
 
@@ -60,13 +62,14 @@ be loaded."} file-contents (atom {}))
    file loads will fail due to the JVM method size limitation.
    In such cases, see `load-large-file-code'`."
   [file file-path file-name]
+  #_(debug/prn-thread (str "load-file-code: " file-path ", " file-name ", " file))
   (apply format
-    "(clojure.lang.Compiler/load (System.IO.StringReader. %s) nil %s %s)"                          ;;; java.io.StringReader.  Add nil (load needs four args)
+    "(clojure.lang.Compiler/load (System.IO.StringReader. %s) %s %s %s)"                          ;;; java.io.StringReader.  Add nil (load needs four args)
 	(map (fn [item]
                 (binding [*print-length* nil
                           *print-level* nil]
                   (pr-str item)))
-              [file file-path file-name])))
+              [file file-path file-path file-name])))
 
 (defn wrap-load-file
   "Middleware that evaluates a file's contents, as per load-file,
@@ -83,7 +86,7 @@ be loaded."} file-contents (atom {}))
                 :op "eval"
                 :code ((if (thread-bound? #'load-file-code)
                          load-file-code
-                         load-large-file-code)
+                         load-file-code)                                 ;;; load-large-file-code -- do we need this?
                        file file-path file-name)
                 :transport (reify Transport
                              (recv [this] (.recv transport))

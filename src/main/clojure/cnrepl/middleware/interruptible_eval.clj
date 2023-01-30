@@ -6,7 +6,7 @@
   (:require
    clojure.main
    clojure.test
-   [cnrepl.middleware :refer [set-descriptor!]]
+   [cnrepl.middleware :refer [set-descriptor!]]  [cnrepl.debug :as debug]
    [cnrepl.middleware.caught :as caught]
    [cnrepl.middleware.print :as print]
    [cnrepl.misc :as misc :refer [response-for ]]                       ;;; with-session-classloader -- removed
@@ -66,6 +66,7 @@
    but it does seem to be a fix for https://github.com/nrepl/nrepl/issues/206"
   [{:keys [transport session eval ns code file line column out-limit]
     :as msg}]
+	#_(debug/prn-thread "ie/evaluate: " code)
   (let [explicit-ns (and ns (-> ns symbol find-ns))
         original-ns (@session #'*ns*)
         maybe-restore-original-ns (if explicit-ns
