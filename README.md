@@ -1,101 +1,100 @@
 # clr.tools.nrepl #
 
-A port of [nrepl/nrepl](https://github.com/nrepl/nrepl) library to ClojureCLR.
+A port of [babashka/babashka.nrepl](https://github.com/babashka/babashka.nrepl) library to ClojureCLR.
+
+A shoutout to Michiel Borkent (@borkdude) for writing the original and for assistance in getting this port up and running.
+
+There is a work-in-progress port of [nrepl/nrepl](https://github.com/nrepl/nrepl). That is in down in subdirectory `partial-nrepl-nrepl-port`.  Go for it.
+
+# Status
+
+We are in alpha for the first release.  The original test suite passes.  We are starting work to test against nREPL clients (think of Calva, CIDER).
+
+# Usage
+
+The original `babashka.nrepl` was build to to run under SCI. (See  [https://github.com/babashka/sci](https://github.com/babashka/sci).) This port has nothing to do with SCI.   
+Otherwise the usage is similar to the original.  We reproduce those notes here with appropriate modifications.
+
+The original version needed a SCI context passed in to `start-server!`.   
+We have maintained that parameter for now -- we will be passing in an empty map -- until we can assess possible need for it in our context.  
+This aspect of the interface may change as we continue with the alpha development.
+
+## Starting a server
+
+To start an nREPL server, call `clojure.tools.nrepl/start-server!`.  The call takes two arguments: (1) a context argument (currently unused, pass an empty map); and (2) a server options map.
+
+```
+(clojure.tools.nrepl/start-server! {} {:host "127.0.0.1" :port 12345})
+```
+
+Option keys include:
+
+- `:debug` -- if set to `true`, the nREPL server will print to standard output all the messages it is receiving over the nREPL channel.
+- `:debug-send` -- if set to `true`, the server will also print the messages it is sending
+- `:quiet` -- if set to `true` the nREPL server will not print out the message "starting nREPL server at ..." when starting.  
+Note that some clients (CIDER?) require this message in order pick up information such as the port number, or so I've heard.
+If not specified, `:quiet` defatuls to `false`, and the message will be printed.
+- `:port` -- the port number.  If not specified, defaults to `1667`.
+- `:host` -- the host IP address or DNS name.   If not specified, it defaults to `0.0.0.0`. (Bind to every interface.)
+- `:xform` -- if not specified, defatuls to `clojure.core.nrepl.middleware/default-xform`.  
+See the [babashka.nrepl middleware docs](https://github.com/babashka/babashka.nrepl/blob/master/doc/middleware.md) for more information.
+
+If no options hashmap is specifed at all, all the defaults will be used.  Thus you can start the nREPL server minimally with
+
+```
+(clojure.tools.nrepl/start-server! {})
+```
+
+## Stopping a server
+
+Pass the result returned from `start-server!` to `stop-server!`:
+
+```
+(def server (clojure.tools.nrepl/start-server! {}))
+....
+
+(clojure.tools.nrepl/stop-server! server)
+```
+
+
+## Parsing an nREPL options string
+
+Use `clojure.tools.nrepl/parse-opt` to parse a `hostname:port` string into a map to pass to `start-server!`:
+
+```
+(clojure.tools.nrepl/start-server! {} (clojure.tools.nrepl/parse-opt "localhost:12345"))
+```
+
+## Middleware
+
+The nREPL middleware is customizable.
+Also this is untested.
+We will be following the [babashka.nrepl middleware docs](https://github.com/babashka/babashka.nrepl/blob/master/doc/middleware.md).  
+
+
+
 
 # Releases
 
-This is not not yet in a release.  The port is in progress.
+```
+PM> Install-Package clojure.tools.nrepl -Version 0.1.0-alpha1
+```
 
+Leiningen/Clojars reference:
 
-# Status 
-
-Note: if you work on this, please note that the root namespace is `cnrepl` , not `nrepl`.
-This is due to a conflict with lein-clr -- it downloads some nrepl files and that messes up everything.
-For now, I'm just kludging it this way.
-
-Stuck in the middle of debugging.  Here is where things stand.
-
-## Source code
-
-| file | translated | loads | Comment |
-|------|:----------:|:-----:|:--------|
-| ack                           | Y | Y | |
-| bencode                       | Y | Y | |
-| cmdline                       | Y | Y | |
-| config                        | Y | Y | |
-| core                          | Y | Y | |
-| helpers                       | Y | Y | |
-| middleware                    | Y | Y | |
-| misc                          | Y | Y | |
-| server                        | Y | Y | |
-| socket                        | Y | Y | |
-| tls                           | N | - | Probably wont' bother with this for now |
-| tls_client_proxy              | N | - | ditto |
-| util/completion               | Y | Y | |
-| util/lookup                   | Y | Y | |
-| util/print                    | Y | Y | |
-| middleware/caught             | Y | Y | |
-| middleware/completion         | Y | Y | |
-| middleware/dynamic_loader     | Y | Y | |
-| middleware/interruptible_eval | Y | Y | |
-| middleware/load_file          | Y | Y | |
-| middleware/lookup             | Y | Y | |
-| middleware/print              | Y | Y | |
-| middleware/session            | Y | Y | |
-| middleware/sideloader         | Y | Y | |
-
-That's everything.
-
-## Tests
-
-| file | translated | loads | Status |
-|------|:----------:|:-----:|:--------|
-| bencode_test                 |  Y | Y | OK |
-| cmdline_test                 |  N | - | -  |
-| cmdline_tty_test             |  N | - | -  |
-| core_test                    |  Y | Y | OK, but (1) |
-| describe_test                |  Y | Y | OK, but (1)  |
-| edn_test                     |  Y | Y | OK, but (1) |
-| helpers_test                 |  N | - | -  |
-| middleware_test              |  Y | Y | OK |
-| misc_test                    |  Y | Y | OK |
-| response_test                |  Y | Y | OK |
-| sanity_test                  |  Y | Y | OK |
-| tls_test                     |  N | - | -  |
-| transport_test               |  Y | Y | OK |
-| util/completion_test         |  Y | Y | OK |
-| util/lookup_test             |  Y | Y | OK |
-| middleware/completion_test   |  Y | Y | OK |
-| middleware/dynamic_load_test |  N | - | -  |
-| middleware/load_file_test    |  Y | Y | NO, see (2) |
-| middleware/lookup_test       |  Y | Y | OK |
-| middleware/print_test        |  Y | Y | OK |
-
-Notes:
-
-1. These tests all run to completion with no errors from the testing frameworks viewpoint,
-but error messages are printed at the console.  There error messages are reported by `noisy-future`,
-a macro that wraps a call to `future` and reports any exception thrown by the `future` thread.
-The exceptions are being reported are from threads that 
-while waiting for reads to complete have their sockets closed.
-Because the tests run using both the bencode and edn transports, you get errors from each. 
-From edn, the reported error is __ERROR: EOF while reading__.
-From bencode, the reported error is __ERROR: Invalid netstring. Unexpected end of input.__.
-If you were to just use `future` instead of `noisy-future`, you'd never know anything was up.
-
-2.  This test prints out one each of the `noisy-future` errors, then hangs forever.
-
-
-So close, so close ... .
+```
+[org.clojure.clr/tools.nrepl "0.1.0-alpha1]
+```
 
 
 # Copyright and License #
 
-Original ClojureJVM code:
+The babashka.nrepl code had the following:
 
->Copyright © 2010-2020 Chas Emerick, Bozhidar Batsov and contributors.
+
+> The project code is Copyright © 2019-2023 Michiel Borkent
 >
->Licensed under the EPL. (See the file epl.html.)
+> It is distributed under the Eclipse Public License 1.0 (http://opensource.org/licenses/eclipse-1.0.php)
 
 
 
