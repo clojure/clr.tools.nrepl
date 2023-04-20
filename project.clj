@@ -1,5 +1,5 @@
 (defproject org.clojure.clr/tools.nrepl "0.0.1-SNAPSHOT"
-  :description "Port of https://github.com/nrepl/nrepl to ClojureCLR"
+  :description "Port of https://github.com/babashka/babashka.nrepl to ClojureCLR"
   :url "https://github.com/clojure/clr.tools.nrepl"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
