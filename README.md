@@ -21,10 +21,10 @@ This aspect of the interface may change as we continue with the alpha developmen
 
 ## Starting a server
 
-To start an nREPL server, call `clojure.tools.nrepl/start-server!`.  The call takes two arguments: (1) a context argument (currently unused, pass an empty map); and (2) a server options map.
+To start an nREPL server, call `clojure.tools.nrepl/start-server!`.  The call takes one optional argumen, a server options map.
 
 ```
-(clojure.tools.nrepl/start-server! {} {:host "127.0.0.1" :port 12345})
+(clojure.tools.nrepl/start-server! {:host "127.0.0.1" :port 12345})
 ```
 
 Option keys include:
@@ -42,7 +42,7 @@ See the [babashka.nrepl middleware docs](https://github.com/babashka/babashka.nr
 If no options hashmap is specifed at all, all the defaults will be used.  Thus you can start the nREPL server minimally with
 
 ```
-(clojure.tools.nrepl/start-server! {})
+(clojure.tools.nrepl/start-server!)
 ```
 
 ## Stopping a server
@@ -50,7 +50,7 @@ If no options hashmap is specifed at all, all the defaults will be used.  Thus y
 Pass the result returned from `start-server!` to `stop-server!`:
 
 ```
-(def server (clojure.tools.nrepl/start-server! {}))
+(def server (clojure.tools.nrepl/start-server!))
 ....
 
 (clojure.tools.nrepl/stop-server! server)
@@ -71,6 +71,7 @@ The nREPL middleware is customizable.
 Also this is untested.
 We will be following the [babashka.nrepl middleware docs](https://github.com/babashka/babashka.nrepl/blob/master/doc/middleware.md).  
 
+There is a rumor that the middleware design may change in the future.
 
 
 

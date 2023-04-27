@@ -3,7 +3,7 @@
   :url "https://github.com/clojure/clr.tools.nrepl"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies []
+  :dependencies [[org.clojure.clr/tools.reader "1.3.7"]]
   :source-paths ["src/main/clojure"]
   :test-paths ["src/test/clojure"]  
   :min-lein-version "2.0.0"
