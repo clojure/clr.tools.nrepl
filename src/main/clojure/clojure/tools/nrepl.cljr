@@ -20,11 +20,11 @@
     {:host host
      :port port}))
 
-(defn start-server! [ctx & [{:keys [host port quiet]
+(defn start-server! [& [{:keys [host port quiet]
                              :or {host "127.0.0.1"
                                   port 1667}
                              :as opts}]]
-  (let [ctx (assoc ctx :sessions (atom #{}))
+  (let [ctx (assoc {} :sessions (atom #{}))
         opts (assoc opts :xform
                     (get opts :xform
                          middleware/default-xform))

@@ -15,7 +15,7 @@
 (set! *warn-on-reflection* true)
 
 ;; Test on a non standard port to minimize REPL interference
-(def nrepl-test-port 54345)
+(def nrepl-test-port 54343)
 
 (defn bytes->str [x]
   (if (bytes? x)  (.GetString System.Text.Encoding/UTF8 (bytes x))
@@ -391,7 +391,6 @@
       (try
         (reset! service
                 (nrepl/start-server!
-                 {}
                  {:host "127.0.0.1"
                   :port nrepl-test-port
                   :debug false
