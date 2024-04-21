@@ -28,11 +28,11 @@
         opts (assoc opts :xform
                     (get opts :xform
                          middleware/default-xform))
-		host-entry (Dns/GetHostEntry ^String host)
+        host-entry (Dns/GetHostEntry ^String host)
         ip-address (first (.AddressList host-entry))
-		ip-endpoint (IPEndPoint. ^IPAddress ip-address (int port))
+        ip-endpoint (IPEndPoint. ^IPAddress ip-address (int port))
         tcp-listener (doto (TcpListener. ip-endpoint) (.Start))  ;; start required here in order to pick up .LocalEndPoint
-		local-port (.Port ^IPEndPoint (.LocalEndPoint (.Server tcp-listener)))]
+        local-port (.Port ^IPEndPoint (.LocalEndPoint (.Server tcp-listener)))]
     (when-not quiet
       (println (format "Started nREPL server at %s:%d" (.Address ip-endpoint) local-port)))
     {:socket tcp-listener
