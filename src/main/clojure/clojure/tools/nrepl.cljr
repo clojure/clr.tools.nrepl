@@ -4,7 +4,7 @@
             [clojure.tools.nrepl.server.middleware :as middleware]
             [clojure.string :as string])
   (:import [System.Net Dns IPEndPoint IPAddress]
-           [System.Net.Sockets TcpListener] ))
+           [System.Net.Sockets TcpListener AddressFamily] ))
 
 (set! *warn-on-reflection* true)
 
@@ -28,8 +28,15 @@
         opts (assoc opts :xform
                     (get opts :xform
                          middleware/default-xform))
+        ;; Calling GetHostEntry with 127.0.0.1 will return all local machine IPs without
+        ;; the loopback IP, whereas with localhost will return the loopback IP.
+        host (if (= "127.0.0.1" host) "localhost" host)
         host-entry (Dns/GetHostEntry ^String host)
-        ip-address (first (.AddressList host-entry))
+        ip-address (->> host-entry
+                        .AddressList
+                        (filter #(= (.AddressFamily ^IPAddress %)
+                                    AddressFamily/InterNetwork))
+                        first)
         ip-endpoint (IPEndPoint. ^IPAddress ip-address (int port))
         tcp-listener (doto (TcpListener. ip-endpoint) (.Start))  ;; start required here in order to pick up .LocalEndPoint
         local-port (.Port ^IPEndPoint (.LocalEndPoint (.Server tcp-listener)))]
