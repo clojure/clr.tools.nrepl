@@ -1,0 +1,10 @@
+{:paths ["src/main/clojure"]
+ :deps { io.github.clojure/clr.tools.reader {:git/tag "v1.4.2" :git/sha "c1186e3"} }
+ :aliases
+   {:test
+     {:extra-paths ["src/test/clojure"]
+	  :extra-deps {io.github.dmiller/test-runner {:git/tag "v0.5.1clr" :git/sha "814e06f"}}
+	  ;; :main-opts {"-m" "cognitect.test-runner" "-d" "src/test/clojure"}
+	  :exec-fn cognitect.test-runner.api/test
+	  :exec-args {:dirs ["src/test/clojure"]}}}
+ }
