@@ -77,14 +77,20 @@ There is a rumor that the middleware design may change in the future.
 
 # Releases
 
+
+[clj](https://clojure.org/guides/getting_started) dependency information:
+```clojure
+io.github.clojure/clr.tools.reader {:git/tag "v0.1.0-alpha2" :git/sha "c1186e3"}
 ```
-PM> Install-Package clojure.tools.nrepl -Version 0.1.0-alpha1
+
+```
+PM> Install-Package clojure.tools.nrepl -Version 0.1.0-alpha2
 ```
 
 Leiningen/Clojars reference:
 
 ```
-[org.clojure.clr/tools.nrepl "0.1.0-alpha1]
+[org.clojure.clr/tools.nrepl "0.1.0-alpha2]
 ```
 
 
