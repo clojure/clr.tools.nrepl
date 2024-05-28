@@ -12,16 +12,16 @@
 		<AssemblyTitle>clojure.tools.nrepl</AssemblyTitle>
 		<Authors>ClojureCLR Contributors</Authors>
 		<Description>A port of babashka/babashka.nrepl to ClojureCLR</Description>
-		<Copyright>Copyright © Rich Hickey, Michiel Borkent, ClojureCLR Contributors 2023</Copyright>
+		<Copyright>Copyright © Rich Hickey, Michiel Borkent, ClojureCLR Contributors 2024</Copyright>
 		<PackageLicenseExpression>EPL-1.0</PackageLicenseExpression>
 		<RepositoryUrl>https://github.com/clojure/clr.tools.namesapce</RepositoryUrl>
 		<Company>ClojureCLR contributors</Company>
 		<PackageTags>Clojure;ClojureCLR</PackageTags>
-		<Version>0.1.0-alpha1</Version>
+		<Version>0.1.0-alpha2</Version>
 	</PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="clojure.tools.reader" Version="1.3.7" />
+    <PackageReference Include="clojure.tools.reader" Version="1.4.2" />
   </ItemGroup>
 
 	<ItemGroup>
