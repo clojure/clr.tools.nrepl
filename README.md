@@ -80,7 +80,7 @@ There is a rumor that the middleware design may change in the future.
 
 [clj](https://clojure.org/guides/getting_started) dependency information:
 ```clojure
-io.github.clojure/clr.tools.reader {:git/tag "v0.1.0-alpha2" :git/sha "a58009f"}
+io.github.clojure/clr.tools.nrepl {:git/tag "v0.1.2-alpha2" :git/sha "a58009f"}
 ```
 
 ```
