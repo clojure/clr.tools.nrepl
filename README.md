@@ -83,8 +83,14 @@ There is a rumor that the middleware design may change in the future.
 io.github.clojure/clr.tools.nrepl {:git/tag "v0.1.2-alpha2" :git/sha "a58009f"}
 ```
 
+or
+```clojure
+io.github.clojure/clr.tools.nrepl {:git/tag "v0.1.0-alpha2" :git/sha "a58009f"}
 ```
-PM> Install-Package clojure.tools.nrepl -Version 0.1.2-alpha2
+(I made a typo in the tagname when I first put this up. Either one will work now.)
+
+```
+PM> Install-Package clojure.tools.nrepl -Version 0.1.0-alpha2
 ```
 
 Leiningen/Clojars reference:
@@ -99,7 +105,7 @@ Leiningen/Clojars reference:
 The babashka.nrepl code had the following:
 
 
-> The project code is Copyright © 2019-2023 Michiel Borkent
+> The project code is Copyright Â© 2019-2023 Michiel Borkent
 >
 > It is distributed under the Eclipse Public License 1.0 (http://opensource.org/licenses/eclipse-1.0.php)
 
